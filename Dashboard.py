@@ -460,7 +460,7 @@ st.markdown("---")
 
 # ===== ส่วนที่ 3: ความตั้งใจในอนาคตและข้อเสนอแนะ → เกจ 4 โซน =====
 st.header("ส่วนที่ 3: ความตั้งใจในอนาคตและข้อเสนอแนะ")
-c1, c2 = st.columns(2)
+c1, c2, c3 = st.columns(3)
 with c1:
     pct_return, n_return = percent_positive(df_filtered['กลับมารับบริการหรือไม่'], positives=("ใช่",))
     render_percent_gauge("1. หากเจ็บป่วยจะกลับมารับบริการหรือไม่ (ตอบ 'ใช่')",
@@ -500,4 +500,5 @@ if target_col in df_filtered.columns:
         st.dataframe(suggestions_df, use_container_width=True, hide_index=True)
     else:
         st.info("ไม่พบข้อมูลความคาดหวังในช่วงข้อมูลที่เลือก")
+
 
