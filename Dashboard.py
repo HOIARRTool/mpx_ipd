@@ -3,12 +3,12 @@
 # ==============================================================================
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 from pathlib import Path
 import os
 from datetime import datetime
 import re
+from typing import Optional, Tuple
 
 # ==============================================================================
 # PAGE CONFIGURATION & STYLING
@@ -18,8 +18,16 @@ st.set_page_config(layout="wide", page_title="Patient Experience Program [IPD]")
 LOGO_URL = "https://raw.githubusercontent.com/HOIARRTool/hoiarr/refs/heads/main/logo1.png"
 
 st.sidebar.markdown(
-    f'<div style="display: flex; align-items: center; margin-bottom: 1rem;"><img src="{LOGO_URL}" style="height: 40px; margin-right: 10px;"><h2 style="margin: 0; font-size: 1.5rem;"><span class="gradient-text">Patient Experience Program [IPD]</span></h2></div>',
-    unsafe_allow_html=True)
+    f'''
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;">
+        <img src="{LOGO_URL}" style="height:40px;display:block;">
+        <h2 style="margin:0;font-size:1.5rem;">
+            <span class="gradient-text">Patient Experience Program [IPD]</span>
+        </h2>
+    </div>
+    ''',
+    unsafe_allow_html=True
+)
 
 st.markdown("""
 <style>
@@ -32,25 +40,27 @@ st.markdown("""
         -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
         font-weight: 700; display: inline-block;
     }
+
+    /* Metric cards (พาสเทล + มุมมน) */
     .metric-box {
-        border-radius: 0.5rem;
-        padding: 1rem;
-        margin-bottom: 1rem;
-        border: 1px solid #e0e0e0;
+        border-radius: 14px;
+        padding: 16px;
+        margin-bottom: 14px;
+        border: 1px solid #e5e7eb;
         text-align: center;
         height: 100%;
         color: #4f4f4f;
+        box-shadow: 0 2px 6px rgba(0,0,0,.05);
+        background: transparent;
     }
-    .metric-box .label { font-size: 1rem; font-weight: 500; color: #555; }
-    .metric-box .value { font-size: 2.2rem; font-weight: 700; }
-
-    /* Pastel Colors */
-    .metric-box-1 { background-color: #e0f7fa; } /* Light Cyan */
-    .metric-box-2 { background-color: #e8f5e9; } /* Light Green */
-    .metric-box-3 { background-color: #fce4ec; } /* Light Pink */
-    .metric-box-4 { background-color: #fffde7; } /* Light Yellow */
-    .metric-box-5 { background-color: #f3e5f5; } /* Light Purple */
-    .metric-box-6 { background-color: #e3f2fd; } /* Light Blue */
+    .metric-box-1 { background:#e0f7fa !important; }
+    .metric-box-2 { background:#e8f5e9 !important; }
+    .metric-box-3 { background:#fce4ec !important; }
+    .metric-box-4 { background:#fffde7 !important; }
+    .metric-box-5 { background:#f3e5f5 !important; }
+    .metric-box-6 { background:#e3f2fd !important; }
+    .metric-box .label { font-size: 1.05rem; font-weight: 600; color: #475569; margin-bottom: 6px; }
+    .metric-box .value { font-size: 2.4rem; font-weight: 800; line-height: 1.1; }
 
     .sidebar-info {
         padding: 10px;
@@ -62,7 +72,7 @@ st.markdown("""
     .sidebar-info .label { font-size: 0.9rem; font-weight: bold; }
     .sidebar-info .value { font-size: 0.9rem; }
 
-    /* หัวข้อเกจและ sub (n=) ให้อ่านง่ายและไม่ถูกตัด */
+    /* หัวข้อเกจ + n */
     .gauge-head {
         font-size: 18px; font-weight: 700; color: #111;
         line-height: 1.25; margin: 2px 4px 6px;
@@ -80,14 +90,14 @@ st.markdown("""
 # ==============================================================================
 DATA_FILE = "patient_satisfaction_data.csv"
 
-def get_file_mtime(path):
+def get_file_mtime(path: str) -> Optional[float]:
     try:
         return os.path.getmtime(path)
     except OSError:
         return None
 
 @st.cache_data
-def load_and_prepare_data(filepath, file_mtime):
+def load_and_prepare_data(filepath: str, file_mtime: Optional[float]) -> pd.DataFrame:
     if not os.path.exists(filepath):
         return pd.DataFrame()
     try:
@@ -129,11 +139,28 @@ def load_and_prepare_data(filepath, file_mtime):
     return df
 
 # ==============================================================================
-# HELPERS: HEART + GAUGE + NORMALIZER
+# HELPERS: NORMALIZE, HEART, GAUGES, DISTRIBUTION
 # ==============================================================================
 
-# HEART (Average rating 1–5)
-def render_average_heart_rating(avg_score: float, max_score: int = 5, responses: int | None = None):
+LIKERT_MAP = {'มากที่สุด': 5, 'มาก': 4, 'ปานกลาง': 3, 'น้อย': 2, 'น้อยมาก': 1,
+              ' มากที่สุด': 5, ' มาก': 4, ' ปานกลาง': 3, ' น้อย': 2, ' น้อยมาก': 1}
+
+def normalize_to_1_5(x):
+    if pd.isna(x):
+        return pd.NA
+    s = str(x).strip()
+    if s in LIKERT_MAP:
+        return LIKERT_MAP[s]
+    m = re.search(r'([1-5])', s)
+    if m:
+        return int(m.group(1))
+    for k, v in LIKERT_MAP.items():
+        base = k.strip()
+        if base and base in s:
+            return v
+    return pd.NA
+
+def render_average_heart_rating(avg_score: float, max_score: int = 5, responses: Optional[int] = None):
     if pd.isna(avg_score):
         st.info("ยังไม่มีคะแนนเฉลี่ยให้แสดง")
         return
@@ -161,7 +188,6 @@ def render_average_heart_rating(avg_score: float, max_score: int = 5, responses:
       .heart {{ font-size: 40px; line-height: 1; display: inline-block; text-shadow: 0 1px 0 rgba(0,0,0,0.06); user-select: none; }}
       .heart.full {{ color: #e02424; }}
       .heart.empty {{ color: #E6E6E6; }}
-      .heart.partial {{ }}
       .heart-labels {{ display: grid; grid-template-columns: repeat({5}, 1fr); margin-top: 6px; }}
       .heart-label {{ text-align: center; color: #6b7280; font-size: 0.9rem; }}
       .heart-sub {{ color: #6b7280; font-size: 0.9rem; margin-top: 6px; }}
@@ -175,24 +201,8 @@ def render_average_heart_rating(avg_score: float, max_score: int = 5, responses:
     """
     st.markdown(component_html, unsafe_allow_html=True)
 
-# Likert normalizer (กันข้อมูลรูปแบบต่าง ๆ)
-LIKERT_MAP = {'มากที่สุด': 5, 'มาก': 4, 'ปานกลาง': 3, 'น้อย': 2, 'น้อยมาก': 1,
-              ' มากที่สุด': 5, ' มาก': 4, ' ปานกลาง': 3, ' น้อย': 2, ' น้อยมาก': 1}
-def normalize_to_1_5(x):
-    if pd.isna(x): 
-        return pd.NA
-    s = str(x).strip()
-    if s in LIKERT_MAP:
-        return LIKERT_MAP[s]
-    m = re.search(r'([1-5])', s)
-    if m: return int(m.group(1))
-    for k, v in LIKERT_MAP.items():
-        base = k.strip()
-        if base and base in s: return v
-    return pd.NA
-
-# Gauge (1–5) with 4 traffic zones: แดง–ส้ม–เหลือง–เขียว
-def plot_gauge_1_5(series_num, title: str, height=190, number_font_size=34, key=None):
+def plot_gauge_1_5(series_num: pd.Series, title: str, height: int = 190,
+                   number_font_size: int = 34, key: Optional[str] = None):
     s = series_num.dropna()
     if s.empty:
         st.info(f"ไม่มีข้อมูลสำหรับ '{title}'")
@@ -223,13 +233,11 @@ def plot_gauge_1_5(series_num, title: str, height=190, number_font_size=34, key=
     fig.update_layout(margin=dict(t=8, r=6, b=6, l=6), height=height)
     st.plotly_chart(fig, use_container_width=True, key=key or f"gauge_{hash(title)}")
 
-# Gauge (0–100%) 4 โซน — mode='high_good' หรือ 'low_good'
-def render_percent_gauge(title, pct, n, height=190, key=None, number_font_size=34, mode='high_good'):
+def render_percent_gauge(title: str, pct: float, n: int, height: int = 190,
+                         key: Optional[str] = None, number_font_size: int = 34, mode: str = 'high_good'):
     st.markdown(f"<div class='gauge-head'>{title}</div>", unsafe_allow_html=True)
     st.markdown(f"<div class='gauge-sub'>n = {n}</div>", unsafe_allow_html=True)
-
     if mode == 'high_good':
-        # สูงดี: แดง→ส้ม→เหลือง→เขียว
         steps_4 = [
             {'range': [0, 50],  'color': '#DC2626'},
             {'range': [50, 65], 'color': '#EA580C'},
@@ -237,14 +245,12 @@ def render_percent_gauge(title, pct, n, height=190, key=None, number_font_size=3
             {'range': [80, 100],'color': '#16A34A'},
         ]
     else:
-        # ต่ำดี (เช่น % ไม่พึงพอใจ): เขียว→เหลือง→ส้ม→แดง
         steps_4 = [
             {'range': [0, 5],   'color': '#16A34A'},
             {'range': [5, 10],  'color': '#F59E0B'},
             {'range': [10, 20], 'color': '#EA580C'},
             {'range': [20, 100],'color': '#DC2626'},
         ]
-
     fig = go.Figure(go.Indicator(
         mode="gauge+number",
         value=float(pct),
@@ -260,12 +266,40 @@ def render_percent_gauge(title, pct, n, height=190, key=None, number_font_size=3
     fig.update_layout(margin=dict(t=8, r=6, b=6, l=6), height=height)
     st.plotly_chart(fig, use_container_width=True, key=key or f"gauge_pct_{hash(title)}")
 
-# Utils
-def percent_positive(series, positives=("ใช่",)):
+def percent_positive(series: pd.Series, positives=("ใช่",)) -> Tuple[float, int]:
     s = series.dropna().astype(str).str.strip()
     n = s.size
-    if n == 0: return 0.0, 0
+    if n == 0:
+        return 0.0, 0
     return (s.isin(positives).sum() / n) * 100.0, n
+
+def plot_rating_distribution(series_likert: pd.Series, title: str, key: str):
+    s = series_likert.apply(normalize_to_1_5).dropna().astype(int)
+    if s.empty:
+        st.info(f"ไม่มีข้อมูลสำหรับ '{title}'")
+        return
+    order = [1, 2, 3, 4, 5]
+    counts = s.value_counts().reindex(order, fill_value=0)
+    total = int(counts.sum())
+    perc = (counts / total * 100).round(1)
+    color_map = {1: '#DC2626', 2: '#EA580C', 3: '#F59E0B', 4: '#22C55E', 5: '#16A34A'}
+    fig = go.Figure(go.Bar(
+        x=order,
+        y=[counts[k] for k in order],
+        text=[f"{counts[k]:,} ({perc[k]:.1f}%)" for k in order],
+        textposition='auto',
+        marker_color=[color_map[k] for k in order],
+        customdata=[perc[k] for k in order],
+        hovertemplate="คะแนน %{x}<br>จำนวน %{y:,}<br>คิดเป็น %{customdata:.1f}%<extra></extra>"
+    ))
+    fig.update_layout(
+        title=title,
+        xaxis=dict(tickmode='array', tickvals=order),
+        yaxis_title="จำนวน (responses)",
+        margin=dict(t=40, r=10, b=40, l=50),
+        height=280
+    )
+    st.plotly_chart(fig, use_container_width=True, key=key)
 
 # ==============================================================================
 # MAIN APP LAYOUT
@@ -293,6 +327,7 @@ available_departments = ['ภาพรวมทั้งหมด'] + sorted(df_
 selected_department = st.sidebar.selectbox("เลือกหน่วยงาน:", available_departments)
 time_filter_option = st.sidebar.selectbox("เลือกช่วงเวลา:",
                                           ["ทั้งหมด", "เลือกตามปี", "เลือกตามไตรมาส", "เลือกตามเดือน"])
+
 df_filtered = df_original.copy()
 if time_filter_option != "ทั้งหมด":
     year_list = sorted(df_original['ปี'].unique(), reverse=True)
@@ -319,14 +354,14 @@ if df_filtered.empty:
 # --- Page Content ---
 st.title(f"DASHBOARD: {selected_department}")
 
-# --- คำนวณ Metrics ---
+# --- Metrics ---
 satisfaction_score_map = {'มากที่สุด': 5, 'มาก': 4, 'ปานกลาง': 3, 'น้อย': 2, 'น้อยมาก': 1}
 df_filtered['คะแนนความพึงพอใจ'] = df_filtered['ความพึงพอใจโดยรวม'].map(satisfaction_score_map)
 average_satisfaction_score = df_filtered['คะแนนความพึงพอใจ'].mean()
 display_avg_satisfaction = f"{average_satisfaction_score:.2f}" if pd.notna(average_satisfaction_score) else "N/A"
 total_responses = len(df_filtered)
 
-def calculate_percentage(df, col_name, positive_value='ใช่', decimals=1):
+def calculate_percentage(df: pd.DataFrame, col_name: str, positive_value='ใช่', decimals=1) -> str:
     if col_name in df.columns and not df[col_name].dropna().empty:
         count = (df[col_name] == positive_value).sum()
         total_count = df[col_name].notna().sum()
@@ -338,51 +373,59 @@ return_service_pct = calculate_percentage(df_filtered, 'กลับมารั
 recommend_pct = calculate_percentage(df_filtered, 'แนะนำผู้อื่นหรือไม่', decimals=1)
 dissatisfied_pct = calculate_percentage(df_filtered, 'มีความไม่พึงพอใจหรือไม่', positive_value='มี', decimals=2)
 
-most_common_health_status = df_filtered['สุขภาพโดยรวม'].mode()[0] if 'สุขภาพโดยรวม' in df_filtered.columns and not \
-df_filtered['สุขภาพโดยรวม'].dropna().empty else "N/A"
+most_common_health_status = (
+    df_filtered['สุขภาพโดยรวม'].mode()[0]
+    if 'สุขภาพโดยรวม' in df_filtered.columns and not df_filtered['สุขภาพโดยรวม'].dropna().empty
+    else "N/A"
+)
 
 st.markdown("##### ภาพรวม")
 row1 = st.columns(3)
 row2 = st.columns(3)
-with row1[0]: st.markdown(
-    f'<div class="metric-box metric-box-1"><div class="label">จำนวนผู้ตอบ</div><div class="value">{total_responses:,}</div></div>',
-    unsafe_allow_html=True)
-with row1[1]: st.markdown(
-    f'<div class="metric-box metric-box-2"><div class="label">คะแนนพึงพอใจเฉลี่ย</div><div class="value">{display_avg_satisfaction}</div></div>',
-    unsafe_allow_html=True)
-with row1[2]: st.markdown(
-    f'<div class="metric-box metric-box-6"><div class="label">สุขภาพผู้ป่วยโดยรวม</div><div class="value" style="font-size: 1.8rem;">{most_common_health_status}</div></div>',
-    unsafe_allow_html=True)
-with row2[0]: st.markdown(
-    f'<div class="metric-box metric-box-3"><div class="label">% กลับมาใช้บริการ</div><div class="value">{return_service_pct}</div></div>',
-    unsafe_allow_html=True)
-with row2[1]: st.markdown(
-    f'<div class="metric-box metric-box-4"><div class="label">% การบอกต่อ</div><div class="value">{recommend_pct}</div></div>',
-    unsafe_allow_html=True)
-with row2[2]: st.markdown(
-    f'<div class="metric-box metric-box-5"><div class="label">% ไม่พึงพอใจ</div><div class="value">{dissatisfied_pct}</div></div>',
-    unsafe_allow_html=True)
+with row1[0]:
+    st.markdown(
+        f'<div class="metric-box metric-box-1"><div class="label">จำนวนผู้ตอบ</div><div class="value">{total_responses:,}</div></div>',
+        unsafe_allow_html=True)
+with row1[1]:
+    st.markdown(
+        f'<div class="metric-box metric-box-2"><div class="label">คะแนนพึงพอใจเฉลี่ย</div><div class="value">{display_avg_satisfaction}</div></div>',
+        unsafe_allow_html=True)
+with row1[2]:
+    st.markdown(
+        f'<div class="metric-box metric-box-6"><div class="label">สุขภาพผู้ป่วยโดยรวม</div><div class="value" style="font-size: 1.8rem;">{most_common_health_status}</div></div>',
+        unsafe_allow_html=True)
+with row2[0]:
+    st.markdown(
+        f'<div class="metric-box metric-box-3"><div class="label">% กลับมาใช้บริการ</div><div class="value">{return_service_pct}</div></div>',
+        unsafe_allow_html=True)
+with row2[1]:
+    st.markdown(
+        f'<div class="metric-box metric-box-4"><div class="label">% การบอกต่อ</div><div class="value">{recommend_pct}</div></div>',
+        unsafe_allow_html=True)
+with row2[2]:
+    st.markdown(
+        f'<div class="metric-box metric-box-5"><div class="label">% ไม่พึงพอใจ</div><div class="value">{dissatisfied_pct}</div></div>',
+        unsafe_allow_html=True)
 st.markdown("---")
 
-# ==============================================================================
-# ***** ส่วนที่เพิ่มเข้ามาใหม่ (คงหัว/ตารางตามเดิม) *****
-# ==============================================================================
+# ===== เพิ่มตารางสรุปจำนวนการประเมิน (คงตามเดิม) =====
 if selected_department == 'ภาพรวมทั้งหมด':
     st.subheader("สรุปจำนวนการประเมินตามหน่วยงาน")
     evaluation_counts = df_filtered['หน่วยงาน'].value_counts().reset_index()
     evaluation_counts.columns = ['หน่วยงาน', 'จำนวนการประเมิน']
     st.dataframe(evaluation_counts, use_container_width=True, hide_index=True)
     st.markdown("---")
-# ==============================================================================
-# ***** จบส่วนที่เพิ่มเข้ามาใหม่ *****
-# ==============================================================================
 
-# ======================= เพิ่มกราฟหัวใจ “ความพึงพอใจโดยรวม” =======================
+# ===== ความพึงพอใจโดยรวม: หัวใจ + Distribution =====
 st.subheader("ความพึงพอใจโดยรวม")
-render_average_heart_rating(average_satisfaction_score, max_score=5, responses=total_responses)
+c_left, c_right = st.columns([1, 1])
+with c_left:
+    render_average_heart_rating(average_satisfaction_score, max_score=5, responses=total_responses)
+with c_right:
+    plot_rating_distribution(df_filtered['ความพึงพอใจโดยรวม'], "Distribution ของคะแนน (1–5)", key="dist_overall_ipd")
 st.markdown("---")
 
-# =================== ส่วนที่ 2: ความพึงพอใจต่อบริการ (รายหัวข้อ) ===================
+# ===== ส่วนที่ 2: ความพึงพอใจต่อบริการ (รายหัวข้อ) → เกจ 4 โซน =====
 st.header("ส่วนที่ 2: ความพึงพอใจต่อบริการ (รายหัวข้อ)")
 satisfaction_cols = {
     'Q1_ความสะดวกการรับบริการ': '1. ความสะดวกในการติดต่อและเข้ารับบริการ',
@@ -396,13 +439,12 @@ satisfaction_cols = {
     'Q9_การมีส่วนร่วมวางแผน': '9. การมีส่วนร่วมในการวางแผนการรักษา',
     'Q10_ข้อมูลด้านยา': '10. ความชัดเจนของข้อมูลด้านยา'
 }
-
-# สร้างคอลัมน์คะแนนตัวเลขสำหรับทุกหัวข้อ (รองรับข้อมูลรูปแบบต่าง ๆ)
+# คำนวณ score 1–5 สำหรับแต่ละหัวข้อ
 for col in satisfaction_cols.keys():
     if col in df_filtered.columns:
         df_filtered[f'{col}__score'] = df_filtered[col].apply(normalize_to_1_5).astype('Float64')
 
-# แสดงเป็นเกจ 4 โซน (สองคอลัมน์เหมือนเดิม)
+# วาดเกจ 2 คอลัมน์เหมือนเดิม
 col_pairs = [list(satisfaction_cols.items())[i:i + 2] for i in range(0, len(satisfaction_cols), 2)]
 for pair in col_pairs:
     cols = st.columns(2)
@@ -416,41 +458,39 @@ for pair in col_pairs:
 
 st.markdown("---")
 
-# =================== ส่วนที่ 3: ความตั้งใจในอนาคตและข้อเสนอแนะ ===================
+# ===== ส่วนที่ 3: ความตั้งใจในอนาคตและข้อเสนอแนะ → เกจ 4 โซน =====
 st.header("ส่วนที่ 3: ความตั้งใจในอนาคตและข้อเสนอแนะ")
-
-# เปลี่ยน Pie เป็น Gauge 4 โซน (เฉพาะ 2 รายการเหมือนโค้ดเดิม)
-col1_future, col2_future = st.columns(2)
-
-with col1_future:
+c1, c2 = st.columns(2)
+with c1:
     pct_return, n_return = percent_positive(df_filtered['กลับมารับบริการหรือไม่'], positives=("ใช่",))
     render_percent_gauge("1. หากเจ็บป่วยจะกลับมารับบริการหรือไม่ (ตอบ 'ใช่')",
                          pct_return, n_return, height=200, key="g_future_return", mode='high_good')
-
-with col2_future:
+with c2:
     pct_reco, n_reco = percent_positive(df_filtered['แนะนำผู้อื่นหรือไม่'], positives=("ใช่",))
     render_percent_gauge("2. จะแนะนำผู้อื่นให้มารับบริการหรือไม่ (ตอบ 'ใช่')",
                          pct_reco, n_reco, height=200, key="g_future_reco", mode='high_good')
 
-# ======= ตารางรายละเอียด/ความคาดหวัง (คงโค้ดและเงื่อนไขตามที่ให้มา) =======
+# ===== ตารางรายละเอียด/ความคาดหวัง (คงตามโค้ดที่ให้มา) =====
 st.subheader("รายละเอียดความไม่พึงพอใจ (หากมี)")
 if 'รายละเอียดความไม่พึงพอใจ' in df_filtered.columns:
     temp_df = df_filtered[['หน่วยงาน', 'รายละเอียดความไม่พึงพอใจ']].copy()
     temp_df.dropna(subset=['รายละเอียดความไม่พึงพอใจ'], inplace=True)
     temp_df['details_stripped'] = temp_df['รายละเอียดความไม่พึงพอใจ'].astype(str).str.strip()
-    dissatisfaction_df = temp_df[
-        (temp_df['details_stripped'] != '') &
-        (temp_df['details_stripped'] != 'ไม่มี')
-    ]
+    dissatisfaction_df = temp_df[(temp_df['details_stripped'] != '') & (temp_df['details_stripped'] != 'ไม่มี')]
     if not dissatisfaction_df.empty:
-        st.dataframe(dissatisfaction_df[['หน่วยงาน', 'รายละเอียดความไม่พึงพอใจ']], use_container_width=True,
-                     hide_index=True)
+        st.dataframe(dissatisfaction_df[['หน่วยงาน', 'รายละเอียดความไม่พึงพอใจ']],
+                     use_container_width=True, hide_index=True)
     else:
         st.info("ไม่พบรายละเอียดความไม่พึงพอใจในช่วงข้อมูลที่เลือก")
 
 st.subheader("ความคาดหวังต่อบริการของโรงพยาบาลในภาพรวม")
-if 'ความคาดหวังต่อบริการของโรงพยาบาลในภาพรวม' in df_filtered.columns:
-    suggestions_df = df_filtered[df_filtered['ความคาดหวังต่อบริการของโรงพยาบาลในภาพรวม'].notna()][['หน่วยงาน', 'ความคาดหวังต่อบริการของโรงพยาบาลในภาพรวม']]
+# โค้ดเดิมตรวจชื่อคอลัมน์ยาว หากไม่เจอ ให้ fallback ไปที่คอลัมน์ที่แมปไว้ชื่อ 'ความคาดหวังต่อบริการ'
+target_col = 'ความคาดหวังต่อบริการของโรงพยาบาลในภาพรวม'
+if target_col not in df_filtered.columns and 'ความคาดหวังต่อบริการ' in df_filtered.columns:
+    target_col = 'ความคาดหวังต่อบริการ'
+
+if target_col in df_filtered.columns:
+    suggestions_df = df_filtered[df_filtered[target_col].notna()][['หน่วยงาน', target_col]]
     if not suggestions_df.empty:
         st.dataframe(suggestions_df, use_container_width=True, hide_index=True)
     else:
