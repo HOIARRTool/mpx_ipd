@@ -8,6 +8,7 @@ import plotly.graph_objects as go
 from pathlib import Path
 import os
 from datetime import datetime
+import re
 
 # ==============================================================================
 # PAGE CONFIGURATION & STYLING
@@ -58,14 +59,19 @@ st.markdown("""
         margin-bottom: 15px;
         text-align: center;
     }
-    .sidebar-info .label {
-        font-size: 0.9rem;
-        font-weight: bold;
-    }
-    .sidebar-info .value {
-        font-size: 0.9rem;
-    }
+    .sidebar-info .label { font-size: 0.9rem; font-weight: bold; }
+    .sidebar-info .value { font-size: 0.9rem; }
 
+    /* หัวข้อเกจและ sub (n=) ให้อ่านง่ายและไม่ถูกตัด */
+    .gauge-head {
+        font-size: 18px; font-weight: 700; color: #111;
+        line-height: 1.25; margin: 2px 4px 6px;
+        white-space: normal; word-break: break-word;
+    }
+    .gauge-sub  {
+        font-size: 16px; font-weight: 600;
+        color: #374151; margin: 0 4px 6px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -74,13 +80,11 @@ st.markdown("""
 # ==============================================================================
 DATA_FILE = "patient_satisfaction_data.csv"
 
-
 def get_file_mtime(path):
     try:
         return os.path.getmtime(path)
     except OSError:
         return None
-
 
 @st.cache_data
 def load_and_prepare_data(filepath, file_mtime):
@@ -124,33 +128,144 @@ def load_and_prepare_data(filepath, file_mtime):
     df['ปี'] = df['date_col'].dt.year
     return df
 
-
 # ==============================================================================
-# PLOTTING FUNCTIONS
+# HELPERS: HEART + GAUGE + NORMALIZER
 # ==============================================================================
-def plot_satisfaction_pie_chart(df, column_name, title):
-    if column_name not in df.columns or df[column_name].dropna().empty: return
-    category_order = ['น้อยมาก', 'น้อย', 'ปานกลาง', 'มาก', 'มากที่สุด']
-    counts = df[column_name].value_counts().reindex(category_order).dropna().reset_index()
-    counts.columns = [column_name, 'จำนวน']
-    fig = px.pie(counts, names=column_name, values='จำนวน', title=title, color=column_name,
-                 color_discrete_map={"น้อยมาก": "#dc3545", "น้อย": "#ffc107", "ปานกลาง": "#6c757d", "มาก": "#17a2b8",
-                                     "มากที่สุด": "#28a745"},
-                 category_orders={column_name: category_order})
-    fig.update_traces(textposition='inside', textinfo='percent+label', showlegend=True)
-    st.plotly_chart(fig, use_container_width=True)
 
+# HEART (Average rating 1–5)
+def render_average_heart_rating(avg_score: float, max_score: int = 5, responses: int | None = None):
+    if pd.isna(avg_score):
+        st.info("ยังไม่มีคะแนนเฉลี่ยให้แสดง")
+        return
+    full = int(avg_score)
+    frac = max(0.0, min(1.0, avg_score - full))
+    hearts_html = ""
+    for i in range(1, max_score + 1):
+        if i <= full:
+            hearts_html += '<span class="heart full">♥</span>'
+        elif i == full + 1 and frac > 0:
+            pct = int(round(frac * 100))
+            hearts_html += f'''
+            <span class="heart partial" style="
+                background: linear-gradient(90deg, #e02424 {pct}%, #E6E6E6 {pct}%);
+                -webkit-background-clip: text; background-clip: text;
+                -webkit-text-fill-color: transparent; color: transparent;">♥</span>'''
+        else:
+            hearts_html += '<span class="heart empty">♥</span>'
+    labels_html = "".join([f'<span class="heart-label">{i}</span>' for i in range(1, max_score + 1)])
+    component_html = f"""
+    <style>
+      .heart-wrap {{ width: 100%; border: 1px solid #eee; border-radius: 12px; padding: 16px 18px; background: #fff; }}
+      .heart-title {{ font-weight: 600; font-size: 1.05rem; color: #333; margin-bottom: 10px; }}
+      .heart-row {{ display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 4px 2px 4px; }}
+      .heart {{ font-size: 40px; line-height: 1; display: inline-block; text-shadow: 0 1px 0 rgba(0,0,0,0.06); user-select: none; }}
+      .heart.full {{ color: #e02424; }}
+      .heart.empty {{ color: #E6E6E6; }}
+      .heart.partial {{ }}
+      .heart-labels {{ display: grid; grid-template-columns: repeat({5}, 1fr); margin-top: 6px; }}
+      .heart-label {{ text-align: center; color: #6b7280; font-size: 0.9rem; }}
+      .heart-sub {{ color: #6b7280; font-size: 0.9rem; margin-top: 6px; }}
+    </style>
+    <div class="heart-wrap">
+      <div class="heart-title">Average rating ({avg_score:.2f})</div>
+      <div class="heart-row">{hearts_html}</div>
+      <div class="heart-labels">{labels_html}</div>
+      {"<div class='heart-sub'>คำตอบ " + f"{responses:,}" + " ข้อ</div>" if responses is not None else ""}
+    </div>
+    """
+    st.markdown(component_html, unsafe_allow_html=True)
 
-def plot_generic_pie_chart(df, column_name, title):
-    if column_name not in df.columns or df[column_name].dropna().empty:
+# Likert normalizer (กันข้อมูลรูปแบบต่าง ๆ)
+LIKERT_MAP = {'มากที่สุด': 5, 'มาก': 4, 'ปานกลาง': 3, 'น้อย': 2, 'น้อยมาก': 1,
+              ' มากที่สุด': 5, ' มาก': 4, ' ปานกลาง': 3, ' น้อย': 2, ' น้อยมาก': 1}
+def normalize_to_1_5(x):
+    if pd.isna(x): 
+        return pd.NA
+    s = str(x).strip()
+    if s in LIKERT_MAP:
+        return LIKERT_MAP[s]
+    m = re.search(r'([1-5])', s)
+    if m: return int(m.group(1))
+    for k, v in LIKERT_MAP.items():
+        base = k.strip()
+        if base and base in s: return v
+    return pd.NA
+
+# Gauge (1–5) with 4 traffic zones: แดง–ส้ม–เหลือง–เขียว
+def plot_gauge_1_5(series_num, title: str, height=190, number_font_size=34, key=None):
+    s = series_num.dropna()
+    if s.empty:
         st.info(f"ไม่มีข้อมูลสำหรับ '{title}'")
         return
-    counts = df[column_name].value_counts().reset_index()
-    counts.columns = [column_name, 'จำนวน']
-    fig = px.pie(counts, names=column_name, values='จำนวน', title=title)
-    fig.update_traces(textposition='inside', textinfo='percent+label', showlegend=True)
-    st.plotly_chart(fig, use_container_width=True)
+    avg = float(s.mean()); n = int(s.size)
 
+    st.markdown(f"<div class='gauge-head'>{title}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='gauge-sub'>n = {n}</div>", unsafe_allow_html=True)
+
+    steps_4 = [
+        {'range': [1, 2], 'color': '#DC2626'},  # แดง
+        {'range': [2, 3], 'color': '#EA580C'},  # ส้ม
+        {'range': [3, 4], 'color': '#F59E0B'},  # เหลือง
+        {'range': [4, 5], 'color': '#16A34A'},  # เขียว
+    ]
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=avg,
+        number={'valueformat': '.2f', 'font': {'size': number_font_size}},
+        title={'text': ''},
+        gauge={
+            'axis': {'range': [1, 5], 'tickmode': 'array', 'tickvals': [1,2,3,4,5]},
+            'bar': {'color': '#111827', 'thickness': 0.25},
+            'steps': steps_4,
+            'threshold': {'line': {'color': '#111827', 'width': 2}, 'thickness': 0.6, 'value': avg}
+        }
+    ))
+    fig.update_layout(margin=dict(t=8, r=6, b=6, l=6), height=height)
+    st.plotly_chart(fig, use_container_width=True, key=key or f"gauge_{hash(title)}")
+
+# Gauge (0–100%) 4 โซน — mode='high_good' หรือ 'low_good'
+def render_percent_gauge(title, pct, n, height=190, key=None, number_font_size=34, mode='high_good'):
+    st.markdown(f"<div class='gauge-head'>{title}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='gauge-sub'>n = {n}</div>", unsafe_allow_html=True)
+
+    if mode == 'high_good':
+        # สูงดี: แดง→ส้ม→เหลือง→เขียว
+        steps_4 = [
+            {'range': [0, 50],  'color': '#DC2626'},
+            {'range': [50, 65], 'color': '#EA580C'},
+            {'range': [65, 80], 'color': '#F59E0B'},
+            {'range': [80, 100],'color': '#16A34A'},
+        ]
+    else:
+        # ต่ำดี (เช่น % ไม่พึงพอใจ): เขียว→เหลือง→ส้ม→แดง
+        steps_4 = [
+            {'range': [0, 5],   'color': '#16A34A'},
+            {'range': [5, 10],  'color': '#F59E0B'},
+            {'range': [10, 20], 'color': '#EA580C'},
+            {'range': [20, 100],'color': '#DC2626'},
+        ]
+
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=float(pct),
+        number={'suffix': '%', 'valueformat': '.1f', 'font': {'size': number_font_size}},
+        title={'text': ''},
+        gauge={
+            'axis': {'range': [0, 100], 'tickmode': 'array', 'tickvals': [0,20,40,60,80,100]},
+            'bar': {'color': '#111827', 'thickness': 0.25},
+            'steps': steps_4,
+            'threshold': {'line': {'color': '#111827', 'width': 2}, 'thickness': 0.6, 'value': float(pct)}
+        }
+    ))
+    fig.update_layout(margin=dict(t=8, r=6, b=6, l=6), height=height)
+    st.plotly_chart(fig, use_container_width=True, key=key or f"gauge_pct_{hash(title)}")
+
+# Utils
+def percent_positive(series, positives=("ใช่",)):
+    s = series.dropna().astype(str).str.strip()
+    n = s.size
+    if n == 0: return 0.0, 0
+    return (s.isin(positives).sum() / n) * 100.0, n
 
 # ==============================================================================
 # MAIN APP LAYOUT
@@ -250,7 +365,7 @@ with row2[2]: st.markdown(
 st.markdown("---")
 
 # ==============================================================================
-# ***** ส่วนที่เพิ่มเข้ามาใหม่ *****
+# ***** ส่วนที่เพิ่มเข้ามาใหม่ (คงหัว/ตารางตามเดิม) *****
 # ==============================================================================
 if selected_department == 'ภาพรวมทั้งหมด':
     st.subheader("สรุปจำนวนการประเมินตามหน่วยงาน")
@@ -262,6 +377,12 @@ if selected_department == 'ภาพรวมทั้งหมด':
 # ***** จบส่วนที่เพิ่มเข้ามาใหม่ *****
 # ==============================================================================
 
+# ======================= เพิ่มกราฟหัวใจ “ความพึงพอใจโดยรวม” =======================
+st.subheader("ความพึงพอใจโดยรวม")
+render_average_heart_rating(average_satisfaction_score, max_score=5, responses=total_responses)
+st.markdown("---")
+
+# =================== ส่วนที่ 2: ความพึงพอใจต่อบริการ (รายหัวข้อ) ===================
 st.header("ส่วนที่ 2: ความพึงพอใจต่อบริการ (รายหัวข้อ)")
 satisfaction_cols = {
     'Q1_ความสะดวกการรับบริการ': '1. ความสะดวกในการติดต่อและเข้ารับบริการ',
@@ -272,23 +393,46 @@ satisfaction_cols = {
     'Q6_การตอบสนอง': '6. การตอบสนองเมื่อต้องการความช่วยเหลือ',
     'Q7_ข้อมูลค่าใช้จ่าย': '7. ความชัดเจนของข้อมูลค่าใช้จ่าย',
     'Q8_ข้อมูลการรักษา': '8. การได้รับข้อมูลการรักษาและอาการแทรกซ้อน',
-    'Q9_การมีส่วนร่วมวางแผน': '9. การมีส่วนร่วมในการวางแผนการรักษา', 'Q10_ข้อมูลด้านยา': '10. ความชัดเจนของข้อมูลด้านยา'
+    'Q9_การมีส่วนร่วมวางแผน': '9. การมีส่วนร่วมในการวางแผนการรักษา',
+    'Q10_ข้อมูลด้านยา': '10. ความชัดเจนของข้อมูลด้านยา'
 }
+
+# สร้างคอลัมน์คะแนนตัวเลขสำหรับทุกหัวข้อ (รองรับข้อมูลรูปแบบต่าง ๆ)
+for col in satisfaction_cols.keys():
+    if col in df_filtered.columns:
+        df_filtered[f'{col}__score'] = df_filtered[col].apply(normalize_to_1_5).astype('Float64')
+
+# แสดงเป็นเกจ 4 โซน (สองคอลัมน์เหมือนเดิม)
 col_pairs = [list(satisfaction_cols.items())[i:i + 2] for i in range(0, len(satisfaction_cols), 2)]
 for pair in col_pairs:
     cols = st.columns(2)
     for i, (col_name, title) in enumerate(pair):
         with cols[i]:
-            plot_generic_pie_chart(df_filtered, col_name, title)
+            score_col = f'{col_name}__score'
+            if score_col in df_filtered.columns:
+                plot_gauge_1_5(df_filtered[score_col], title, height=200, key=f"g_{col_name}")
+            else:
+                st.info(f"ไม่มีข้อมูลสำหรับ '{title}'")
 
 st.markdown("---")
-st.header("ส่วนที่ 3: ความตั้งใจในอนาคตและข้อเสนอแนะ")
-col1_future, col2_future = st.columns(2)
-with col1_future:
-    plot_generic_pie_chart(df_filtered, 'กลับมารับบริการหรือไม่', '1. หากเจ็บป่วยจะกลับมารับบริการหรือไม่')
-with col2_future:
-    plot_generic_pie_chart(df_filtered, 'แนะนำผู้อื่นหรือไม่', '2. จะแนะนำผู้อื่นให้มารับบริการหรือไม่')
 
+# =================== ส่วนที่ 3: ความตั้งใจในอนาคตและข้อเสนอแนะ ===================
+st.header("ส่วนที่ 3: ความตั้งใจในอนาคตและข้อเสนอแนะ")
+
+# เปลี่ยน Pie เป็น Gauge 4 โซน (เฉพาะ 2 รายการเหมือนโค้ดเดิม)
+col1_future, col2_future = st.columns(2)
+
+with col1_future:
+    pct_return, n_return = percent_positive(df_filtered['กลับมารับบริการหรือไม่'], positives=("ใช่",))
+    render_percent_gauge("1. หากเจ็บป่วยจะกลับมารับบริการหรือไม่ (ตอบ 'ใช่')",
+                         pct_return, n_return, height=200, key="g_future_return", mode='high_good')
+
+with col2_future:
+    pct_reco, n_reco = percent_positive(df_filtered['แนะนำผู้อื่นหรือไม่'], positives=("ใช่",))
+    render_percent_gauge("2. จะแนะนำผู้อื่นให้มารับบริการหรือไม่ (ตอบ 'ใช่')",
+                         pct_reco, n_reco, height=200, key="g_future_reco", mode='high_good')
+
+# ======= ตารางรายละเอียด/ความคาดหวัง (คงโค้ดและเงื่อนไขตามที่ให้มา) =======
 st.subheader("รายละเอียดความไม่พึงพอใจ (หากมี)")
 if 'รายละเอียดความไม่พึงพอใจ' in df_filtered.columns:
     temp_df = df_filtered[['หน่วยงาน', 'รายละเอียดความไม่พึงพอใจ']].copy()
@@ -297,8 +441,7 @@ if 'รายละเอียดความไม่พึงพอใจ' in
     dissatisfaction_df = temp_df[
         (temp_df['details_stripped'] != '') &
         (temp_df['details_stripped'] != 'ไม่มี')
-        ]
-
+    ]
     if not dissatisfaction_df.empty:
         st.dataframe(dissatisfaction_df[['หน่วยงาน', 'รายละเอียดความไม่พึงพอใจ']], use_container_width=True,
                      hide_index=True)
@@ -311,5 +454,4 @@ if 'ความคาดหวังต่อบริการของโร�
     if not suggestions_df.empty:
         st.dataframe(suggestions_df, use_container_width=True, hide_index=True)
     else:
-
         st.info("ไม่พบข้อมูลความคาดหวังในช่วงข้อมูลที่เลือก")
