@@ -40,7 +40,6 @@ if not st.session_state.get("password_correct", False):
 st.success("✅ เข้าสู่ระบบสำเร็จ!")
 st.title("Admin: อัปโหลดไฟล์ข้อมูล")
 st.markdown("---")
-st.header("อัปโหลดไฟล์ Patient Satisfaction (XLSX)")
 
 # ❗️ จุดที่ 1: เปลี่ยน type เป็น 'xlsx'
 uploaded_file = st.file_uploader(
@@ -67,4 +66,5 @@ if uploaded_file is not None:
 
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการประมวลผลไฟล์: {e}")
+
         st.warning("กรุณาตรวจสอบว่าไฟล์เป็น Excel (.xlsx) ที่ถูกต้องตามรูปแบบหรือไม่")
