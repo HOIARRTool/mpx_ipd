@@ -12,12 +12,12 @@ from datetime import datetime
 # ==============================================================================
 # PAGE CONFIGURATION & STYLING
 # ==============================================================================
-st.set_page_config(layout="wide", page_title="Patient Experience Program")
+st.set_page_config(layout="wide", page_title="Patient Experience Program [IPD]")
 
 LOGO_URL = "https://raw.githubusercontent.com/HOIARRTool/hoiarr/refs/heads/main/logo1.png"
 
 st.sidebar.markdown(
-    f'<div style="display: flex; align-items: center; margin-bottom: 1rem;"><img src="{LOGO_URL}" style="height: 40px; margin-right: 10px;"><h2 style="margin: 0; font-size: 1.5rem;"><span class="gradient-text">Patient Experience Program</span></h2></div>',
+    f'<div style="display: flex; align-items: center; margin-bottom: 1rem;"><img src="{LOGO_URL}" style="height: 40px; margin-right: 10px;"><h2 style="margin: 0; font-size: 1.5rem;"><span class="gradient-text">Patient Experience Program [IPD]</span></h2></div>',
     unsafe_allow_html=True)
 
 st.markdown("""
@@ -311,4 +311,5 @@ if 'ความคาดหวังต่อบริการของโร�
     if not suggestions_df.empty:
         st.dataframe(suggestions_df, use_container_width=True, hide_index=True)
     else:
+
         st.info("ไม่พบข้อมูลความคาดหวังในช่วงข้อมูลที่เลือก")
