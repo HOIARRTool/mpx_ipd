@@ -469,6 +469,11 @@ with c2:
     pct_reco, n_reco = percent_positive(df_filtered['แนะนำผู้อื่นหรือไม่'], positives=("ใช่",))
     render_percent_gauge("2. จะแนะนำผู้อื่นให้มารับบริการหรือไม่ (ตอบ 'ใช่')",
                          pct_reco, n_reco, height=200, key="g_future_reco", mode='high_good')
+with c3:
+    # ยิ่งต่ำยิ่งดี → ใช้ mode='low_good' (เขียวซ้าย แดงขวา)
+    pct_dissat, n_dissat = percent_positive(df_filtered['มีความไม่พึงพอใจหรือไม่'], positives=("มี",))
+    render_percent_gauge("3. ไม่พึงพอใจ (ตอบ 'มี')",
+                         pct_dissat, n_dissat, height=200, key="g_future_dissat", mode='low_good')
 
 # ===== ตารางรายละเอียด/ความคาดหวัง (คงตามโค้ดที่ให้มา) =====
 st.subheader("รายละเอียดความไม่พึงพอใจ (หากมี)")
@@ -495,3 +500,4 @@ if target_col in df_filtered.columns:
         st.dataframe(suggestions_df, use_container_width=True, hide_index=True)
     else:
         st.info("ไม่พบข้อมูลความคาดหวังในช่วงข้อมูลที่เลือก")
+
