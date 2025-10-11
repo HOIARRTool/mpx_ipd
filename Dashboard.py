@@ -8,7 +8,7 @@ from pathlib import Path
 import os
 from datetime import datetime
 import re
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Any
 
 # ==============================================================================
 # PAGE CONFIGURATION & STYLING
@@ -71,6 +71,8 @@ st.markdown("""
     }
     .sidebar-info .label { font-size: 0.9rem; font-weight: bold; }
     .sidebar-info .value { font-size: 0.9rem; }
+    .sidebar-info .source { font-size: 0.8rem; color: #555; margin-top: 5px; }
+
 
     /* หัวข้อเกจ + n */
     .gauge-head {
@@ -86,26 +88,35 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# DATA LOADING AND PREPARATION
+# DATA LOADING AND PREPARATION (*** MODIFIED SECTION ***)
 # ==============================================================================
-DATA_FILE = "patient_satisfaction_data.csv"
-
-def get_file_mtime(path: str) -> Optional[float]:
-    try:
-        return os.path.getmtime(path)
-    except OSError:
-        return None
 
 @st.cache_data
-def load_and_prepare_data(filepath: str, file_mtime: Optional[float]) -> pd.DataFrame:
-    if not os.path.exists(filepath):
+def load_and_prepare_data(source: Any) -> pd.DataFrame:
+    """
+    Loads data from a file path or a Streamlit UploadedFile object.
+    Supports both .csv and .xlsx formats.
+    """
+    if source is None:
         return pd.DataFrame()
     try:
-        df = pd.read_csv(filepath)
+        # Determine the file type and read the data into a DataFrame
+        if isinstance(source, str): # File path
+            if source.lower().endswith('.xlsx'):
+                df = pd.read_excel(source)
+            else: # Assume CSV for other string paths
+                df = pd.read_csv(source)
+        else: # UploadedFile object from Streamlit
+            if source.name.lower().endswith('.xlsx'):
+                df = pd.read_excel(source)
+            else: # Assume CSV
+                df = pd.read_csv(source)
+
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการอ่านไฟล์ข้อมูล: {e}")
         return pd.DataFrame()
 
+    # --- Data Cleaning and Preparation (same as original code) ---
     column_mapping = {
         'หอผู้ป่วยที่ท่านเข้ารับบริการ/ ต้องการประเมิน \n(เพื่อสะท้อนกลับหน่วยงานโดยตรง)': 'หน่วยงาน',
         'ส่วนที่ 1 ข้อมูลทั่วไปของผู้ตอบแบบประเมิน\n1. เพศ': 'เพศ',
@@ -131,11 +142,23 @@ def load_and_prepare_data(filepath: str, file_mtime: Optional[float]) -> pd.Data
         'ข้อเสนอแนะเพิ่มเติมเพื่อการพัฒนาคุณภาพโรงพยาบาล': 'ความคาดหวังต่อบริการ'
     }
     df = df.rename(columns=lambda c: column_mapping.get(c.strip(), c.strip()))
-    df['date_col'] = pd.to_datetime(df['ประทับเวลา'], errors='coerce')
-    df = df.dropna(subset=['date_col'])
-    df['เดือน'] = df['date_col'].dt.month
-    df['ไตรมาส'] = df['date_col'].dt.quarter
-    df['ปี'] = df['date_col'].dt.year
+
+    # Ensure the timestamp column exists before processing
+    if 'ประทับเวลา' in df.columns:
+        df['date_col'] = pd.to_datetime(df['ประทับเวลา'], errors='coerce')
+        df = df.dropna(subset=['date_col'])
+        df['เดือน'] = df['date_col'].dt.month
+        df['ไตรมาส'] = df['date_col'].dt.quarter
+        df['ปี'] = df['date_col'].dt.year
+    else:
+        # If no timestamp, create a dummy column to avoid errors, but show a warning
+        st.warning("ไม่พบคอลัมน์ 'ประทับเวลา' ในไฟล์ข้อมูล ตัวกรองเวลาอาจไม่ทำงาน")
+        df['date_col'] = pd.NaT
+        df['เดือน'] = None
+        df['ไตรมาส'] = None
+        df['ปี'] = None
+
+
     return df
 
 # ==============================================================================
@@ -202,7 +225,7 @@ def render_average_heart_rating(avg_score: float, max_score: int = 5, responses:
     st.markdown(component_html, unsafe_allow_html=True)
 
 def plot_gauge_1_5(series_num: pd.Series, title: str, height: int = 190,
-                   number_font_size: int = 34, key: Optional[str] = None):
+                     number_font_size: int = 34, key: Optional[str] = None):
     s = series_num.dropna()
     if s.empty:
         st.info(f"ไม่มีข้อมูลสำหรับ '{title}'")
@@ -234,7 +257,7 @@ def plot_gauge_1_5(series_num: pd.Series, title: str, height: int = 190,
     st.plotly_chart(fig, use_container_width=True, key=key or f"gauge_{hash(title)}")
 
 def render_percent_gauge(title: str, pct: float, n: int, height: int = 190,
-                         key: Optional[str] = None, number_font_size: int = 34, mode: str = 'high_good'):
+                           key: Optional[str] = None, number_font_size: int = 34, mode: str = 'high_good'):
     st.markdown(f"<div class='gauge-head'>{title}</div>", unsafe_allow_html=True)
     st.markdown(f"<div class='gauge-sub'>n = {n}</div>", unsafe_allow_html=True)
     if mode == 'high_good':
@@ -302,56 +325,99 @@ def plot_rating_distribution(series_likert: pd.Series, title: str, key: str):
     st.plotly_chart(fig, use_container_width=True, key=key)
 
 # ==============================================================================
-# MAIN APP LAYOUT
+# MAIN APP LAYOUT (*** MODIFIED SECTION ***)
 # ==============================================================================
 
-file_modification_time = get_file_mtime(DATA_FILE)
-df_original = load_and_prepare_data(DATA_FILE, file_modification_time)
+# --- Sidebar: File Uploader ---
+st.sidebar.markdown("---")
+st.sidebar.header("จัดการข้อมูล")
+uploaded_file = st.sidebar.file_uploader(
+    "อัปโหลดไฟล์ใหม่ (CSV or XLSX)",
+    type=['csv', 'xlsx'],
+    help="หากไม่อัปโหลด โปรแกรมจะพยายามโหลดไฟล์ 'mpxi.xlsx' ที่อยู่ในโฟลเดอร์เดียวกันโดยอัตโนมัติ"
+)
 
+# --- Data Loading Logic ---
+DEFAULT_FILE = "mpxi.xlsx"
+df_original = pd.DataFrame()
+data_source_info = ""
+
+# Determine the data source: uploaded file takes priority over the default local file.
+data_source = None
+if uploaded_file is not None:
+    data_source = uploaded_file
+    data_source_info = f"ไฟล์ที่อัปโหลด: `{uploaded_file.name}`"
+elif os.path.exists(DEFAULT_FILE):
+    data_source = DEFAULT_FILE
+    data_source_info = f"ไฟล์เริ่มต้น: `{DEFAULT_FILE}`"
+
+# Load data if a source has been identified
+if data_source:
+    df_original = load_and_prepare_data(data_source)
+
+# Stop execution if no data is available from any source
 if df_original.empty:
-    st.warning("ยังไม่มีข้อมูล, กรุณาไปที่หน้า 'Admin Upload' เพื่ออัปโหลดไฟล์ข้อมูลก่อน")
+    st.warning(
+        "ไม่พบข้อมูล 😥 กรุณาอัปโหลดไฟล์ข้อมูล หรือ "
+        f"วางไฟล์ `{DEFAULT_FILE}` ไว้ในโฟลเดอร์เดียวกับโปรแกรม"
+    )
     st.stop()
 
-# --- Sidebar ---
+# --- Sidebar Filters ---
+min_date_val = df_original['date_col'].min()
+max_date_val = df_original['date_col'].max()
+
 st.sidebar.markdown("---")
-min_date = df_original['date_col'].min().strftime('%d %b %Y')
-max_date = df_original['date_col'].max().strftime('%d %b %Y')
-st.sidebar.markdown(f"""
-<div class="sidebar-info">
-    <div class="label">ช่วงวันที่ของข้อมูล</div>
-    <div class="value">{min_date} - {max_date}</div>
-</div>
-""", unsafe_allow_html=True)
+# Display data source and date range info in the sidebar
+if pd.notna(min_date_val) and pd.notna(max_date_val):
+    min_date_str = min_date_val.strftime('%d %b %Y')
+    max_date_str = max_date_val.strftime('%d %b %Y')
+    st.sidebar.markdown(f"""
+    <div class="sidebar-info">
+        <div class="label">ช่วงวันที่ของข้อมูล</div>
+        <div class="value">{min_date_str} - {max_date_str}</div>
+        <div class="source">{data_source_info}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
 st.sidebar.header("ตัวกรองข้อมูล (Filter)")
 available_departments = ['ภาพรวมทั้งหมด'] + sorted(df_original['หน่วยงาน'].dropna().unique().tolist())
 selected_department = st.sidebar.selectbox("เลือกหน่วยงาน:", available_departments)
 time_filter_option = st.sidebar.selectbox("เลือกช่วงเวลา:",
                                           ["ทั้งหมด", "เลือกตามปี", "เลือกตามไตรมาส", "เลือกตามเดือน"])
 
+# Apply filters to the original dataframe
 df_filtered = df_original.copy()
-if time_filter_option != "ทั้งหมด":
-    year_list = sorted(df_original['ปี'].unique(), reverse=True)
+if time_filter_option != "ทั้งหมด" and pd.notna(df_original['date_col']).any():
+    year_list = sorted(df_original['ปี'].dropna().unique().astype(int), reverse=True)
     selected_year = st.sidebar.selectbox("เลือกปี:", year_list)
-    df_filtered = df_original[df_original['ปี'] == selected_year]
+    df_filtered = df_filtered[df_filtered['ปี'] == selected_year]
+
     if time_filter_option in ["เลือกตามไตรมาส", "เลือกตามเดือน"]:
         if time_filter_option == "เลือกตามไตรมาส":
-            quarter_list = sorted(df_filtered['ไตรมาส'].unique())
+            quarter_list = sorted(df_filtered['ไตรมาส'].dropna().unique().astype(int))
             selected_quarter = st.sidebar.selectbox("เลือกไตรมาส:", quarter_list)
             df_filtered = df_filtered[df_filtered['ไตรมาส'] == selected_quarter]
         elif time_filter_option == "เลือกตามเดือน":
             month_map = {1: 'ม.ค.', 2: 'ก.พ.', 3: 'มี.ค.', 4: 'เม.ย.', 5: 'พ.ค.', 6: 'มิ.ย.', 7: 'ก.ค.', 8: 'ส.ค.',
                          9: 'ก.ย.', 10: 'ต.ค.', 11: 'พ.ย.', 12: 'ธ.ค.'}
-            month_list = sorted(df_filtered['เดือน'].unique())
+            month_list = sorted(df_filtered['เดือน'].dropna().unique().astype(int))
             selected_month_num = st.sidebar.selectbox("เลือกเดือน:", month_list,
                                                       format_func=lambda x: month_map.get(x, x))
             df_filtered = df_filtered[df_filtered['เดือน'] == selected_month_num]
+
 if selected_department != 'ภาพรวมทั้งหมด':
     df_filtered = df_filtered[df_filtered['หน่วยงาน'] == selected_department]
+
 if df_filtered.empty:
     st.warning("ไม่พบข้อมูลตามตัวกรองที่ท่านเลือก")
     st.stop()
 
-# --- Page Content ---
+
+# ==============================================================================
+# PAGE CONTENT (*** UNCHANGED FROM THIS POINT ONWARD ***)
+# ==============================================================================
+
 st.title(f"DASHBOARD: {selected_department}")
 
 # --- Metrics ---
@@ -500,5 +566,3 @@ if target_col in df_filtered.columns:
         st.dataframe(suggestions_df, use_container_width=True, hide_index=True)
     else:
         st.info("ไม่พบข้อมูลความคาดหวังในช่วงข้อมูลที่เลือก")
-
-
