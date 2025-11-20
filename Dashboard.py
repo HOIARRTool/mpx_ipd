@@ -423,18 +423,17 @@ if df_filtered.empty:
 # PAGE CONTENT (*** UNCHANGED FROM THIS POINT ONWARD ***)
 # ==============================================================================
 
-# 1. กำหนด Link รูปภาพ
+# 1. กำหนด Link รูปภาพ (ต้องมี ?raw=true ทั้งคู่)
 logo_urls = [
-    "https://github.com/HOIARRTool/appqtbi/blob/main/messageImage_1763018963411.jpg?raw=true",    
-    "https://github.com/HOIARRTool/appqtbi/blob/main/csm_logo_mfu_3d_colour_15e5a7a50f.png"
+    "https://github.com/HOIARRTool/appqtbi/blob/main/messageImage_1763018963411.jpg?raw=true",     
+    "https://github.com/HOIARRTool/appqtbi/blob/main/csm_logo_mfu_3d_colour_15e5a7a50f.png?raw=true"  # 👈 เติมตรงนี้ครับ
 ]
 
-# ใช้ HTML จัดวางแทน columns เพื่อความแม่นยำ
+# ใช้ HTML จัดวาง (ส่วนนี้ถูกต้องแล้วครับ)
 st.markdown(
     f'''
     <div style="display: flex; justify-content: flex-end; align-items: flex-start; gap: 20px; margin-bottom: 10px;">
         <img src="{logo_urls[0]}" style="height: 50px; margin-top: 15px;">
-        
         <img src="{logo_urls[1]}" style="height: 70px;">
     </div>
     ''',
@@ -590,6 +589,7 @@ if target_col in df_filtered.columns:
         st.dataframe(suggestions_df, use_container_width=True, hide_index=True)
     else:
         st.info("ไม่พบข้อมูลความคาดหวังในช่วงข้อมูลที่เลือก")
+
 
 
 
