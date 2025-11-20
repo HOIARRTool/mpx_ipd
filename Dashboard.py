@@ -13,12 +13,11 @@ from typing import Optional, Tuple, Any
 # ==============================================================================
 # PAGE CONFIGURATION
 # ==============================================================================
-# ต้องใส่บรรทัดนี้เป็นคำสั่งแรกของ Streamlit เสมอ
 st.set_page_config(layout="wide", page_title="Patient Experience Program [IPD]")
 
-# แก้ไขลิงก์: ตัด 'refs/heads/' ออก ให้เหลือแค่ 'main'
 LOGO_URL = "https://raw.githubusercontent.com/HOIARRTool/hoiarr/main/logo1.png"
 
+# --- Sidebar Logo ---
 st.sidebar.markdown(
     f'''
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;">
@@ -31,6 +30,7 @@ st.sidebar.markdown(
     unsafe_allow_html=True
 )
 
+# --- CSS Styles (เพิ่มส่วน Real-time Badge ให้แล้ว) ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap');
@@ -43,7 +43,7 @@ st.markdown("""
         font-weight: 700; display: inline-block;
     }
 
-    /* Metric cards (พาสเทล + มุมมน) */
+    /* Metric cards */
     .metric-box {
         border-radius: 14px;
         padding: 16px;
@@ -73,10 +73,8 @@ st.markdown("""
     }
     .sidebar-info .label { font-size: 0.9rem; font-weight: bold; }
     .sidebar-info .value { font-size: 0.9rem; }
-    .sidebar-info .source { font-size: 0.8rem; color: #555; margin-top: 5px; }
-
-
-    /* หัวข้อเกจ + n */
+    
+    /* Gauge Styling */
     .gauge-head {
         font-size: 18px; font-weight: 700; color: #111;
         line-height: 1.25; margin: 2px 4px 6px;
@@ -86,38 +84,59 @@ st.markdown("""
         font-size: 16px; font-weight: 600;
         color: #374151; margin: 0 4px 6px;
     }
+
+    /* --- Real-time Badge CSS (เพิ่มใหม่) --- */
+    @keyframes pulse-green {
+        0% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.7); }
+        70% { box-shadow: 0 0 0 10px rgba(46, 204, 113, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0); }
+    }
+    .realtime-badge {
+        background-color: #e8f5e9;
+        color: #2e7d32;
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 10px;
+        border: 1px solid #c8e6c9;
+    }
+    .status-dot {
+        width: 10px;
+        height: 10px;
+        background-color: #2ecc71;
+        border-radius: 50%;
+        animation: pulse-green 2s infinite;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# DATA LOADING AND PREPARATION (*** MODIFIED SECTION ***)
+# DATA LOADING
 # ==============================================================================
 @st.cache_data(ttl=300)
 def load_and_prepare_data(source: Any) -> pd.DataFrame:
-    """
-    Loads data from a file path or a Streamlit UploadedFile object.
-    Supports both .csv and .xlsx formats.
-    """
     if source is None:
         return pd.DataFrame()
     try:
-        # Determine the file type and read the data into a DataFrame
-        if isinstance(source, str): # File path
+        if isinstance(source, str):
             if source.lower().endswith('.xlsx'):
                 df = pd.read_excel(source)
-            else: # Assume CSV for other string paths
+            else:
                 df = pd.read_csv(source)
-        else: # UploadedFile object from Streamlit
+        else:
             if source.name.lower().endswith('.xlsx'):
                 df = pd.read_excel(source)
-            else: # Assume CSV
+            else:
                 df = pd.read_csv(source)
-
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการอ่านไฟล์ข้อมูล: {e}")
         return pd.DataFrame()
 
-    # --- Data Cleaning and Preparation (same as original code) ---
+    # --- Data Cleaning ---
     column_mapping = {
         'หอผู้ป่วยที่ท่านเข้ารับบริการ/ ต้องการประเมิน \n(เพื่อสะท้อนกลับหน่วยงานโดยตรง)': 'หน่วยงาน',
         'ส่วนที่ 1 ข้อมูลทั่วไปของผู้ตอบแบบประเมิน\n1. เพศ': 'เพศ',
@@ -144,46 +163,38 @@ def load_and_prepare_data(source: Any) -> pd.DataFrame:
     }
     df = df.rename(columns=lambda c: column_mapping.get(c.strip(), c.strip()))
 
-    # Ensure the timestamp column exists before processing
     if 'ประทับเวลา' in df.columns:
-    # เพิ่ม dayfirst=True เพื่อบอกว่าเลขตัวหน้าคือ "วัน" (ไม่ใช่เดือน)
+        # ใช้ dayfirst=True ตามที่คุณต้องการ
         df['date_col'] = pd.to_datetime(df['ประทับเวลา'], dayfirst=True, errors='coerce')
-        df = df.dropna(subset=['date_col'])
         df = df.dropna(subset=['date_col'])
         df['เดือน'] = df['date_col'].dt.month
         df['ไตรมาส'] = df['date_col'].dt.quarter
         df['ปี'] = df['date_col'].dt.year
     else:
-        # If no timestamp, create a dummy column to avoid errors, but show a warning
-        st.warning("ไม่พบคอลัมน์ 'ประทับเวลา' ในไฟล์ข้อมูล ตัวกรองเวลาอาจไม่ทำงาน")
+        st.warning("ไม่พบคอลัมน์ 'ประทับเวลา' ในไฟล์ข้อมูล")
         df['date_col'] = pd.NaT
         df['เดือน'] = None
         df['ไตรมาส'] = None
         df['ปี'] = None
 
-
     return df
 
 # ==============================================================================
-# HELPERS: NORMALIZE, HEART, GAUGES, DISTRIBUTION
+# HELPERS (Likert, Heart, Gauge)
 # ==============================================================================
 
 LIKERT_MAP = {'มากที่สุด': 5, 'มาก': 4, 'ปานกลาง': 3, 'น้อย': 2, 'น้อยมาก': 1,
               ' มากที่สุด': 5, ' มาก': 4, ' ปานกลาง': 3, ' น้อย': 2, ' น้อยมาก': 1}
 
 def normalize_to_1_5(x):
-    if pd.isna(x):
-        return pd.NA
+    if pd.isna(x): return pd.NA
     s = str(x).strip()
-    if s in LIKERT_MAP:
-        return LIKERT_MAP[s]
+    if s in LIKERT_MAP: return LIKERT_MAP[s]
     m = re.search(r'([1-5])', s)
-    if m:
-        return int(m.group(1))
+    if m: return int(m.group(1))
     for k, v in LIKERT_MAP.items():
         base = k.strip()
-        if base and base in s:
-            return v
+        if base and base in s: return v
     return pd.NA
 
 def render_average_heart_rating(avg_score: float, max_score: int = 5, responses: Optional[int] = None):
@@ -198,11 +209,7 @@ def render_average_heart_rating(avg_score: float, max_score: int = 5, responses:
             hearts_html += '<span class="heart full">♥</span>'
         elif i == full + 1 and frac > 0:
             pct = int(round(frac * 100))
-            hearts_html += f'''
-            <span class="heart partial" style="
-                background: linear-gradient(90deg, #e02424 {pct}%, #E6E6E6 {pct}%);
-                -webkit-background-clip: text; background-clip: text;
-                -webkit-text-fill-color: transparent; color: transparent;">♥</span>'''
+            hearts_html += f'''<span class="heart partial" style="background: linear-gradient(90deg, #e02424 {pct}%, #E6E6E6 {pct}%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent;">♥</span>'''
         else:
             hearts_html += '<span class="heart empty">♥</span>'
     labels_html = "".join([f'<span class="heart-label">{i}</span>' for i in range(1, max_score + 1)])
@@ -234,60 +241,26 @@ def plot_gauge_1_5(series_num: pd.Series, title: str, height: int = 190,
         st.info(f"ไม่มีข้อมูลสำหรับ '{title}'")
         return
     avg = float(s.mean()); n = int(s.size)
-
     st.markdown(f"<div class='gauge-head'>{title}</div>", unsafe_allow_html=True)
     st.markdown(f"<div class='gauge-sub'>n = {n}</div>", unsafe_allow_html=True)
-
-    steps_4 = [
-        {'range': [1, 2], 'color': '#DC2626'},  # แดง
-        {'range': [2, 3], 'color': '#EA580C'},  # ส้ม
-        {'range': [3, 4], 'color': '#F59E0B'},  # เหลือง
-        {'range': [4, 5], 'color': '#16A34A'},  # เขียว
-    ]
+    steps_4 = [{'range': [1, 2], 'color': '#DC2626'}, {'range': [2, 3], 'color': '#EA580C'}, {'range': [3, 4], 'color': '#F59E0B'}, {'range': [4, 5], 'color': '#16A34A'}]
     fig = go.Figure(go.Indicator(
-        mode="gauge+number",
-        value=avg,
-        number={'valueformat': '.2f', 'font': {'size': number_font_size}},
-        title={'text': ''},
-        gauge={
-            'axis': {'range': [1, 5], 'tickmode': 'array', 'tickvals': [1,2,3,4,5]},
-            'bar': {'color': '#111827', 'thickness': 0.25},
-            'steps': steps_4,
-            'threshold': {'line': {'color': '#111827', 'width': 2}, 'thickness': 0.6, 'value': avg}
-        }
+        mode="gauge+number", value=avg, number={'valueformat': '.2f', 'font': {'size': number_font_size}},
+        title={'text': ''}, gauge={'axis': {'range': [1, 5], 'tickmode': 'array', 'tickvals': [1,2,3,4,5]}, 'bar': {'color': '#111827', 'thickness': 0.25}, 'steps': steps_4, 'threshold': {'line': {'color': '#111827', 'width': 2}, 'thickness': 0.6, 'value': avg}}
     ))
     fig.update_layout(margin=dict(t=8, r=6, b=6, l=6), height=height)
     st.plotly_chart(fig, use_container_width=True, key=key or f"gauge_{hash(title)}")
 
-def render_percent_gauge(title: str, pct: float, n: int, height: int = 190,
-                           key: Optional[str] = None, number_font_size: int = 34, mode: str = 'high_good'):
+def render_percent_gauge(title: str, pct: float, n: int, height: int = 190, key: Optional[str] = None, number_font_size: int = 34, mode: str = 'high_good'):
     st.markdown(f"<div class='gauge-head'>{title}</div>", unsafe_allow_html=True)
     st.markdown(f"<div class='gauge-sub'>n = {n}</div>", unsafe_allow_html=True)
     if mode == 'high_good':
-        steps_4 = [
-            {'range': [0, 50],  'color': '#DC2626'},
-            {'range': [50, 65], 'color': '#EA580C'},
-            {'range': [65, 80], 'color': '#F59E0B'},
-            {'range': [80, 100],'color': '#16A34A'},
-        ]
+        steps_4 = [{'range': [0, 50], 'color': '#DC2626'}, {'range': [50, 65], 'color': '#EA580C'}, {'range': [65, 80], 'color': '#F59E0B'}, {'range': [80, 100],'color': '#16A34A'}]
     else:
-        steps_4 = [
-            {'range': [0, 5],   'color': '#16A34A'},
-            {'range': [5, 10],  'color': '#F59E0B'},
-            {'range': [10, 20], 'color': '#EA580C'},
-            {'range': [20, 100],'color': '#DC2626'},
-        ]
+        steps_4 = [{'range': [0, 5], 'color': '#16A34A'}, {'range': [5, 10], 'color': '#F59E0B'}, {'range': [10, 20], 'color': '#EA580C'}, {'range': [20, 100],'color': '#DC2626'}]
     fig = go.Figure(go.Indicator(
-        mode="gauge+number",
-        value=float(pct),
-        number={'suffix': '%', 'valueformat': '.1f', 'font': {'size': number_font_size}},
-        title={'text': ''},
-        gauge={
-            'axis': {'range': [0, 100], 'tickmode': 'array', 'tickvals': [0,20,40,60,80,100]},
-            'bar': {'color': '#111827', 'thickness': 0.25},
-            'steps': steps_4,
-            'threshold': {'line': {'color': '#111827', 'width': 2}, 'thickness': 0.6, 'value': float(pct)}
-        }
+        mode="gauge+number", value=float(pct), number={'suffix': '%', 'valueformat': '.1f', 'font': {'size': number_font_size}},
+        title={'text': ''}, gauge={'axis': {'range': [0, 100], 'tickmode': 'array', 'tickvals': [0,20,40,60,80,100]}, 'bar': {'color': '#111827', 'thickness': 0.25}, 'steps': steps_4, 'threshold': {'line': {'color': '#111827', 'width': 2}, 'thickness': 0.6, 'value': float(pct)}}
     ))
     fig.update_layout(margin=dict(t=8, r=6, b=6, l=6), height=height)
     st.plotly_chart(fig, use_container_width=True, key=key or f"gauge_pct_{hash(title)}")
@@ -295,8 +268,7 @@ def render_percent_gauge(title: str, pct: float, n: int, height: int = 190,
 def percent_positive(series: pd.Series, positives=("ใช่",)) -> Tuple[float, int]:
     s = series.dropna().astype(str).str.strip()
     n = s.size
-    if n == 0:
-        return 0.0, 0
+    if n == 0: return 0.0, 0
     return (s.isin(positives).sum() / n) * 100.0, n
 
 def plot_rating_distribution(series_likert: pd.Series, title: str, key: str):
@@ -310,73 +282,64 @@ def plot_rating_distribution(series_likert: pd.Series, title: str, key: str):
     perc = (counts / total * 100).round(1)
     color_map = {1: '#DC2626', 2: '#EA580C', 3: '#F59E0B', 4: '#22C55E', 5: '#16A34A'}
     fig = go.Figure(go.Bar(
-        x=order,
-        y=[counts[k] for k in order],
-        text=[f"{counts[k]:,} ({perc[k]:.1f}%)" for k in order],
-        textposition='auto',
-        marker_color=[color_map[k] for k in order],
-        customdata=[perc[k] for k in order],
+        x=order, y=[counts[k] for k in order], text=[f"{counts[k]:,} ({perc[k]:.1f}%)" for k in order],
+        textposition='auto', marker_color=[color_map[k] for k in order], customdata=[perc[k] for k in order],
         hovertemplate="คะแนน %{x}<br>จำนวน %{y:,}<br>คิดเป็น %{customdata:.1f}%<extra></extra>"
     ))
-    fig.update_layout(
-        title=title,
-        xaxis=dict(tickmode='array', tickvals=order),
-        yaxis_title="จำนวน (responses)",
-        margin=dict(t=40, r=10, b=40, l=50),
-        height=280
-    )
+    fig.update_layout(title=title, xaxis=dict(tickmode='array', tickvals=order), yaxis_title="จำนวน (responses)", margin=dict(t=40, r=10, b=40, l=50), height=280)
     st.plotly_chart(fig, use_container_width=True, key=key)
 
 # ==============================================================================
-# MAIN APP LAYOUT (*** MODIFIED SECTION ***)
+# MAIN APP LAYOUT (*** Cleaned & Fixed ***)
 # ==============================================================================
 
-# --- Data Loading Logic (Real-time Google Sheet) ---
-
-# 1. ตั้งค่า Link Google Sheet ของคุณ
+# 1. ตั้งค่า Link Google Sheet (IPD)
 SHEET_ID = '11DWvvit4Y50oO-7vebb6etXmvItBe-q1rJaOuezKs4A'
-SHEET_GID = '1977910889' # เอามาจากเลขหลัง gid= ในลิงก์ของคุณ
-# สร้าง URL สำหรับ Export เป็น CSV
+SHEET_GID = '1977910889'
 GSHEET_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={SHEET_GID}"
 
 df_original = pd.DataFrame()
 data_source_info = ""
 
-# Logic: ถ้ามีการอัปโหลดไฟล์ ให้ใช้ไฟล์อัปโหลดก่อน / ถ้าไม่มี ให้ดึง Real-time จาก Google Sheet
-if uploaded_file is not None:
-    data_source = uploaded_file
-    data_source_info = f"ไฟล์ที่อัปโหลด: `{uploaded_file.name}`"
-    df_original = load_and_prepare_data(data_source)
-else:
-    try:
-        # ใช้ URL ส่งเข้าไปในฟังก์ชันเดิมได้เลย (pd.read_csv รองรับ URL)
-        df_original = load_and_prepare_data(GSHEET_URL)
-        data_source_info = "Google Sheets (Real-time 🟢)"
-    except Exception as e:
-        st.error(f"⚠️ ไม่สามารถดึงข้อมูลจาก Google Sheets ได้: {e}")
-        st.info("คำแนะนำ: กรุณาตรวจสอบว่าตั้งค่า Share Google Sheet เป็น 'Anyone with the link' หรือยัง")
+# --- Logic ใหม่: ไม่มีการเช็ค uploaded_file แล้ว ---
+try:
+    df_original = load_and_prepare_data(GSHEET_URL)
+    if df_original.empty:
+        st.warning("ไม่พบข้อมูลใน Google Sheet")
         st.stop()
-
-# Stop execution if no data is available
-if df_original.empty:
-    st.warning("ไม่พบข้อมูลใน Google Sheet")
+    data_source_info = "Google Sheets (Real-time 🟢)"
+except Exception as e:
+    st.error(f"⚠️ ไม่สามารถดึงข้อมูลจาก Google Sheets ได้: {e}")
     st.stop()
+
 # --- Sidebar Filters ---
 min_date_val = df_original['date_col'].min()
 max_date_val = df_original['date_col'].max()
 
 st.sidebar.markdown("---")
-# Display data source and date range info in the sidebar
+
+# --- ส่วนแสดงผลปุ่มเรืองแสง (เพิ่มใหม่ให้เหมือน OPD) ---
+min_date_str = "N/A"
+max_date_str = "N/A"
 if pd.notna(min_date_val) and pd.notna(max_date_val):
     min_date_str = min_date_val.strftime('%d %b %Y')
     max_date_str = max_date_val.strftime('%d %b %Y')
-    st.sidebar.markdown(f"""
-    <div class="sidebar-info">
-        <div class="label">ช่วงวันที่ของข้อมูล</div>
-        <div class="value">{min_date_str} - {max_date_str}</div>
-        <div class="source">{data_source_info}</div>
+
+# สร้าง HTML สำหรับปุ่ม (แบบเรืองแสง)
+source_html = f'''
+    <div class="realtime-badge">
+        <div class="status-dot"></div>
+        {data_source_info}
     </div>
-    """, unsafe_allow_html=True)
+'''
+
+st.sidebar.markdown(f"""
+<div class="sidebar-info">
+    <div class="label">ช่วงวันที่ของข้อมูล</div>
+    <div class="value">{min_date_str} - {max_date_str}</div>
+    {source_html}
+</div>
+""", unsafe_allow_html=True)
 
 st.sidebar.header("ตัวกรองข้อมูล (Filter)")
 available_departments = ['ภาพรวมทั้งหมด'] + sorted(df_original['หน่วยงาน'].dropna().unique().tolist())
@@ -384,7 +347,7 @@ selected_department = st.sidebar.selectbox("เลือกหน่วยงา
 time_filter_option = st.sidebar.selectbox("เลือกช่วงเวลา:",
                                           ["ทั้งหมด", "เลือกตามปี", "เลือกตามไตรมาส", "เลือกตามเดือน"])
 
-# Apply filters to the original dataframe
+# Apply filters
 df_filtered = df_original.copy()
 if time_filter_option != "ทั้งหมด" and pd.notna(df_original['date_col']).any():
     year_list = sorted(df_original['ปี'].dropna().unique().astype(int), reverse=True)
@@ -411,18 +374,14 @@ if df_filtered.empty:
     st.warning("ไม่พบข้อมูลตามตัวกรองที่ท่านเลือก")
     st.stop()
 
-
 # ==============================================================================
-# PAGE CONTENT (*** UNCHANGED FROM THIS POINT ONWARD ***)
+# PAGE CONTENT
 # ==============================================================================
-
-# 1. กำหนด Link รูปภาพ (ต้องมี ?raw=true ทั้งคู่)
 logo_urls = [
     "https://github.com/HOIARRTool/appqtbi/blob/main/messageImage_1763018963411.jpg?raw=true",     
     "https://github.com/HOIARRTool/appqtbi/blob/main/csm_logo_mfu_3d_colour_15e5a7a50f.png?raw=true"  
 ]
 
-# ใช้ HTML จัดวาง (ส่วนนี้ถูกต้องแล้วครับ)
 st.markdown(
     f'''
     <div style="display: flex; justify-content: flex-end; align-items: flex-start; gap: 20px; margin-bottom: 10px;">
@@ -433,7 +392,6 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# แสดง Title
 st.title(f"DASHBOARD: {selected_department}")
 
 # --- Metrics ---
@@ -465,32 +423,20 @@ st.markdown("##### ภาพรวม")
 row1 = st.columns(3)
 row2 = st.columns(3)
 with row1[0]:
-    st.markdown(
-        f'<div class="metric-box metric-box-1"><div class="label">จำนวนผู้ตอบ</div><div class="value">{total_responses:,}</div></div>',
-        unsafe_allow_html=True)
+    st.markdown(f'<div class="metric-box metric-box-1"><div class="label">จำนวนผู้ตอบ</div><div class="value">{total_responses:,}</div></div>', unsafe_allow_html=True)
 with row1[1]:
-    st.markdown(
-        f'<div class="metric-box metric-box-2"><div class="label">คะแนนพึงพอใจเฉลี่ย</div><div class="value">{display_avg_satisfaction}</div></div>',
-        unsafe_allow_html=True)
+    st.markdown(f'<div class="metric-box metric-box-2"><div class="label">คะแนนพึงพอใจเฉลี่ย</div><div class="value">{display_avg_satisfaction}</div></div>', unsafe_allow_html=True)
 with row1[2]:
-    st.markdown(
-        f'<div class="metric-box metric-box-6"><div class="label">สุขภาพผู้ป่วยโดยรวม</div><div class="value" style="font-size: 1.8rem;">{most_common_health_status}</div></div>',
-        unsafe_allow_html=True)
+    st.markdown(f'<div class="metric-box metric-box-6"><div class="label">สุขภาพผู้ป่วยโดยรวม</div><div class="value" style="font-size: 1.8rem;">{most_common_health_status}</div></div>', unsafe_allow_html=True)
 with row2[0]:
-    st.markdown(
-        f'<div class="metric-box metric-box-3"><div class="label">% กลับมาใช้บริการ</div><div class="value">{return_service_pct}</div></div>',
-        unsafe_allow_html=True)
+    st.markdown(f'<div class="metric-box metric-box-3"><div class="label">% กลับมาใช้บริการ</div><div class="value">{return_service_pct}</div></div>', unsafe_allow_html=True)
 with row2[1]:
-    st.markdown(
-        f'<div class="metric-box metric-box-4"><div class="label">% การบอกต่อ</div><div class="value">{recommend_pct}</div></div>',
-        unsafe_allow_html=True)
+    st.markdown(f'<div class="metric-box metric-box-4"><div class="label">% การบอกต่อ</div><div class="value">{recommend_pct}</div></div>', unsafe_allow_html=True)
 with row2[2]:
-    st.markdown(
-        f'<div class="metric-box metric-box-5"><div class="label">% ไม่พึงพอใจ</div><div class="value">{dissatisfied_pct}</div></div>',
-        unsafe_allow_html=True)
+    st.markdown(f'<div class="metric-box metric-box-5"><div class="label">% ไม่พึงพอใจ</div><div class="value">{dissatisfied_pct}</div></div>', unsafe_allow_html=True)
 st.markdown("---")
 
-# ===== เพิ่มตารางสรุปจำนวนการประเมิน (คงตามเดิม) =====
+# ===== สรุปจำนวนการประเมิน =====
 if selected_department == 'ภาพรวมทั้งหมด':
     st.subheader("สรุปจำนวนการประเมินตามหน่วยงาน")
     evaluation_counts = df_filtered['หน่วยงาน'].value_counts().reset_index()
@@ -498,7 +444,7 @@ if selected_department == 'ภาพรวมทั้งหมด':
     st.dataframe(evaluation_counts, use_container_width=True, hide_index=True)
     st.markdown("---")
 
-# ===== ความพึงพอใจโดยรวม: หัวใจ + Distribution =====
+# ===== ความพึงพอใจโดยรวม =====
 st.subheader("ความพึงพอใจโดยรวม")
 c_left, c_right = st.columns([1, 1])
 with c_left:
@@ -507,7 +453,7 @@ with c_right:
     plot_rating_distribution(df_filtered['ความพึงพอใจโดยรวม'], "Distribution ของคะแนน (1–5)", key="dist_overall_ipd")
 st.markdown("---")
 
-# ===== ส่วนที่ 2: ความพึงพอใจต่อบริการ (รายหัวข้อ) → เกจ 4 โซน =====
+# ===== ส่วนที่ 2: ความพึงพอใจต่อบริการ =====
 st.header("ส่วนที่ 2: ความพึงพอใจต่อบริการ (รายหัวข้อ)")
 satisfaction_cols = {
     'Q1_ความสะดวกการรับบริการ': '1. ความสะดวกในการติดต่อและเข้ารับบริการ',
@@ -521,12 +467,10 @@ satisfaction_cols = {
     'Q9_การมีส่วนร่วมวางแผน': '9. การมีส่วนร่วมในการวางแผนการรักษา',
     'Q10_ข้อมูลด้านยา': '10. ความชัดเจนของข้อมูลด้านยา'
 }
-# คำนวณ score 1–5 สำหรับแต่ละหัวข้อ
 for col in satisfaction_cols.keys():
     if col in df_filtered.columns:
         df_filtered[f'{col}__score'] = df_filtered[col].apply(normalize_to_1_5).astype('Float64')
 
-# วาดเกจ 2 คอลัมน์เหมือนเดิม
 col_pairs = [list(satisfaction_cols.items())[i:i + 2] for i in range(0, len(satisfaction_cols), 2)]
 for pair in col_pairs:
     cols = st.columns(2)
@@ -540,7 +484,7 @@ for pair in col_pairs:
 
 st.markdown("---")
 
-# ===== ส่วนที่ 3: ความตั้งใจในอนาคตและข้อเสนอแนะ → เกจ 4 โซน =====
+# ===== ส่วนที่ 3: ความตั้งใจในอนาคต =====
 st.header("ส่วนที่ 3: ความตั้งใจในอนาคตและข้อเสนอแนะ")
 c1, c2, c3 = st.columns(3)
 with c1:
@@ -552,12 +496,11 @@ with c2:
     render_percent_gauge("2. จะแนะนำผู้อื่นให้มารับบริการหรือไม่ (ตอบ 'ใช่')",
                          pct_reco, n_reco, height=200, key="g_future_reco", mode='high_good')
 with c3:
-    # ยิ่งต่ำยิ่งดี → ใช้ mode='low_good' (เขียวซ้าย แดงขวา)
     pct_dissat, n_dissat = percent_positive(df_filtered['มีความไม่พึงพอใจหรือไม่'], positives=("มี",))
     render_percent_gauge("3. ไม่พึงพอใจ (ตอบ 'มี')",
                          pct_dissat, n_dissat, height=200, key="g_future_dissat", mode='low_good')
 
-# ===== ตารางรายละเอียด/ความคาดหวัง (คงตามโค้ดที่ให้มา) =====
+# ===== รายละเอียดความไม่พึงพอใจ =====
 st.subheader("รายละเอียดความไม่พึงพอใจ (หากมี)")
 if 'รายละเอียดความไม่พึงพอใจ' in df_filtered.columns:
     temp_df = df_filtered[['หน่วยงาน', 'รายละเอียดความไม่พึงพอใจ']].copy()
@@ -571,7 +514,6 @@ if 'รายละเอียดความไม่พึงพอใจ' in
         st.info("ไม่พบรายละเอียดความไม่พึงพอใจในช่วงข้อมูลที่เลือก")
 
 st.subheader("ความคาดหวังต่อบริการของโรงพยาบาลในภาพรวม")
-# โค้ดเดิมตรวจชื่อคอลัมน์ยาว หากไม่เจอ ให้ fallback ไปที่คอลัมน์ที่แมปไว้ชื่อ 'ความคาดหวังต่อบริการ'
 target_col = 'ความคาดหวังต่อบริการของโรงพยาบาลในภาพรวม'
 if target_col not in df_filtered.columns and 'ความคาดหวังต่อบริการ' in df_filtered.columns:
     target_col = 'ความคาดหวังต่อบริการ'
@@ -582,17 +524,3 @@ if target_col in df_filtered.columns:
         st.dataframe(suggestions_df, use_container_width=True, hide_index=True)
     else:
         st.info("ไม่พบข้อมูลความคาดหวังในช่วงข้อมูลที่เลือก")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
