@@ -18,7 +18,10 @@ st.set_page_config(layout="wide", page_title="Patient Experience Program [IPD]")
 
 # แก้ไขลิงก์: ตัด 'refs/heads/' ออก ให้เหลือแค่ 'main'
 LOGO_URL = "https://raw.githubusercontent.com/HOIARRTool/hoiarr/main/logo1.png"
-
+logo_urls = [
+    "https://github.com/HOIARRTool/appqtbi/blob/main/messageImage_1763018963411.jpg?raw=true",    
+    "https://mfu.ac.th/fileadmin/_processed_/6/7/csm_logo_mfu_3d_colour_15e5a7a50f.png",
+]
 st.sidebar.markdown(
     f'''
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;">
@@ -571,6 +574,7 @@ if target_col in df_filtered.columns:
         st.dataframe(suggestions_df, use_container_width=True, hide_index=True)
     else:
         st.info("ไม่พบข้อมูลความคาดหวังในช่วงข้อมูลที่เลือก")
+
 
 
 
