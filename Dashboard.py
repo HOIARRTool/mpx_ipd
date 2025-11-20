@@ -330,13 +330,6 @@ def plot_rating_distribution(series_likert: pd.Series, title: str, key: str):
 # ==============================================================================
 # MAIN APP LAYOUT (*** MODIFIED SECTION ***)
 # ==============================================================================
-# --- Sidebar: File Uploader (ยังเก็บไว้เผื่ออยากดูไฟล์เก่า) ---
-st.sidebar.markdown("---")
-st.sidebar.header("จัดการข้อมูล")
-uploaded_file = st.sidebar.file_uploader(
-    "อัปโหลดไฟล์ใหม่ (กรณีไม่ใช้ Real-time)",
-    type=['csv', 'xlsx']
-)
 
 # --- Data Loading Logic (Real-time Google Sheet) ---
 
@@ -426,15 +419,15 @@ if df_filtered.empty:
 # 1. กำหนด Link รูปภาพ (ต้องมี ?raw=true ทั้งคู่)
 logo_urls = [
     "https://github.com/HOIARRTool/appqtbi/blob/main/messageImage_1763018963411.jpg?raw=true",     
-    "https://github.com/HOIARRTool/appqtbi/blob/main/csm_logo_mfu_3d_colour_15e5a7a50f.png?raw=true"  # 👈 เติมตรงนี้ครับ
+    "https://github.com/HOIARRTool/appqtbi/blob/main/csm_logo_mfu_3d_colour_15e5a7a50f.png?raw=true"  
 ]
 
 # ใช้ HTML จัดวาง (ส่วนนี้ถูกต้องแล้วครับ)
 st.markdown(
     f'''
     <div style="display: flex; justify-content: flex-end; align-items: flex-start; gap: 20px; margin-bottom: 10px;">
-        <img src="{logo_urls[0]}" style="height: 50px; margin-top: 15px;">
-        <img src="{logo_urls[1]}" style="height: 70px;">
+        <img src="{logo_urls[0]}" style="height: 70px; margin-top: 20px;">
+        <img src="{logo_urls[1]}" style="height: 90px;">
     </div>
     ''',
     unsafe_allow_html=True
@@ -589,6 +582,7 @@ if target_col in df_filtered.columns:
         st.dataframe(suggestions_df, use_container_width=True, hide_index=True)
     else:
         st.info("ไม่พบข้อมูลความคาดหวังในช่วงข้อมูลที่เลือก")
+
 
 
 
