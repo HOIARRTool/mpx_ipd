@@ -146,7 +146,9 @@ def load_and_prepare_data(source: Any) -> pd.DataFrame:
 
     # Ensure the timestamp column exists before processing
     if 'ประทับเวลา' in df.columns:
-        df['date_col'] = pd.to_datetime(df['ประทับเวลา'], errors='coerce')
+    # เพิ่ม dayfirst=True เพื่อบอกว่าเลขตัวหน้าคือ "วัน" (ไม่ใช่เดือน)
+    df['date_col'] = pd.to_datetime(df['ประทับเวลา'], dayfirst=True, errors='coerce')
+    df = df.dropna(subset=['date_col'])
         df = df.dropna(subset=['date_col'])
         df['เดือน'] = df['date_col'].dt.month
         df['ไตรมาส'] = df['date_col'].dt.quarter
@@ -569,6 +571,7 @@ if target_col in df_filtered.columns:
         st.dataframe(suggestions_df, use_container_width=True, hide_index=True)
     else:
         st.info("ไม่พบข้อมูลความคาดหวังในช่วงข้อมูลที่เลือก")
+
 
 
 
