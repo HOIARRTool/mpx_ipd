@@ -6,7 +6,6 @@ import pandas as pd
 import plotly.graph_objects as go
 from pathlib import Path
 import os
-from datetime import datetime
 import re
 from typing import Optional, Tuple, Any
 
@@ -15,22 +14,36 @@ from typing import Optional, Tuple, Any
 # ==============================================================================
 st.set_page_config(layout="wide", page_title="Patient Experience Program [IPD]")
 
+# --- CSS & LOGO ---
 LOGO_URL = "https://raw.githubusercontent.com/HOIARRTool/hoiarr/main/logo1.png"
+logo_urls = [
+    "https://github.com/HOIARRTool/appqtbi/blob/main/messageImage_1763018963411.jpg?raw=true",     
+    "https://github.com/HOIARRTool/appqtbi/blob/main/csm_logo_mfu_3d_colour_15e5a7a50f.png?raw=true"  
+]
 
-# --- Sidebar Logo ---
 st.sidebar.markdown(
     f'''
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;">
         <img src="{LOGO_URL}" style="height:40px;display:block;">
         <h2 style="margin:0;font-size:1.5rem;">
-            <span class="gradient-text">Patient Experience Program [IPD]</span>
+            <span class="gradient-text">Patient Experience [IPD]</span>
         </h2>
     </div>
     ''',
     unsafe_allow_html=True
 )
 
-# --- CSS Styles (เพิ่มส่วน Real-time Badge ให้แล้ว) ---
+st.markdown(
+    f'''
+    <div style="display: flex; justify-content: flex-end; align-items: flex-start; gap: 20px; margin-bottom: 10px;">
+        <img src="{logo_urls[0]}" style="height: 70px; margin-top: 20px;">
+        <img src="{logo_urls[1]}" style="height: 90px;">
+    </div>
+    ''',
+    unsafe_allow_html=True
+)
+
+# CSS Styles (รวม Animation ปุ่มเรืองแสง)
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap');
@@ -42,8 +55,6 @@ st.markdown("""
         -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
         font-weight: 700; display: inline-block;
     }
-
-    /* Metric cards */
     .metric-box {
         border-radius: 14px;
         padding: 16px;
@@ -74,7 +85,6 @@ st.markdown("""
     .sidebar-info .label { font-size: 0.9rem; font-weight: bold; }
     .sidebar-info .value { font-size: 0.9rem; }
     
-    /* Gauge Styling */
     .gauge-head {
         font-size: 18px; font-weight: 700; color: #111;
         line-height: 1.25; margin: 2px 4px 6px;
@@ -85,7 +95,7 @@ st.markdown("""
         color: #374151; margin: 0 4px 6px;
     }
 
-    /* --- Real-time Badge CSS (เพิ่มใหม่) --- */
+    /* Real-time Badge */
     @keyframes pulse-green {
         0% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.7); }
         70% { box-shadow: 0 0 0 10px rgba(46, 204, 113, 0); }
@@ -133,7 +143,7 @@ def load_and_prepare_data(source: Any) -> pd.DataFrame:
             else:
                 df = pd.read_csv(source)
     except Exception as e:
-        st.error(f"เกิดข้อผิดพลาดในการอ่านไฟล์ข้อมูล: {e}")
+        # st.error(f"เกิดข้อผิดพลาดในการอ่านไฟล์ข้อมูล: {e}")
         return pd.DataFrame()
 
     # --- Data Cleaning ---
@@ -164,14 +174,12 @@ def load_and_prepare_data(source: Any) -> pd.DataFrame:
     df = df.rename(columns=lambda c: column_mapping.get(c.strip(), c.strip()))
 
     if 'ประทับเวลา' in df.columns:
-        # ใช้ dayfirst=True ตามที่คุณต้องการ
         df['date_col'] = pd.to_datetime(df['ประทับเวลา'], dayfirst=True, errors='coerce')
         df = df.dropna(subset=['date_col'])
         df['เดือน'] = df['date_col'].dt.month
         df['ไตรมาส'] = df['date_col'].dt.quarter
         df['ปี'] = df['date_col'].dt.year
     else:
-        st.warning("ไม่พบคอลัมน์ 'ประทับเวลา' ในไฟล์ข้อมูล")
         df['date_col'] = pd.NaT
         df['เดือน'] = None
         df['ไตรมาส'] = None
@@ -180,120 +188,11 @@ def load_and_prepare_data(source: Any) -> pd.DataFrame:
     return df
 
 # ==============================================================================
-# HELPERS (Likert, Heart, Gauge)
+# MAIN APP LOGIC (Real-time Only)
 # ==============================================================================
 
-LIKERT_MAP = {'มากที่สุด': 5, 'มาก': 4, 'ปานกลาง': 3, 'น้อย': 2, 'น้อยมาก': 1,
-              ' มากที่สุด': 5, ' มาก': 4, ' ปานกลาง': 3, ' น้อย': 2, ' น้อยมาก': 1}
-
-def normalize_to_1_5(x):
-    if pd.isna(x): return pd.NA
-    s = str(x).strip()
-    if s in LIKERT_MAP: return LIKERT_MAP[s]
-    m = re.search(r'([1-5])', s)
-    if m: return int(m.group(1))
-    for k, v in LIKERT_MAP.items():
-        base = k.strip()
-        if base and base in s: return v
-    return pd.NA
-
-def render_average_heart_rating(avg_score: float, max_score: int = 5, responses: Optional[int] = None):
-    if pd.isna(avg_score):
-        st.info("ยังไม่มีคะแนนเฉลี่ยให้แสดง")
-        return
-    full = int(avg_score)
-    frac = max(0.0, min(1.0, avg_score - full))
-    hearts_html = ""
-    for i in range(1, max_score + 1):
-        if i <= full:
-            hearts_html += '<span class="heart full">♥</span>'
-        elif i == full + 1 and frac > 0:
-            pct = int(round(frac * 100))
-            hearts_html += f'''<span class="heart partial" style="background: linear-gradient(90deg, #e02424 {pct}%, #E6E6E6 {pct}%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent;">♥</span>'''
-        else:
-            hearts_html += '<span class="heart empty">♥</span>'
-    labels_html = "".join([f'<span class="heart-label">{i}</span>' for i in range(1, max_score + 1)])
-    component_html = f"""
-    <style>
-      .heart-wrap {{ width: 100%; border: 1px solid #eee; border-radius: 12px; padding: 16px 18px; background: #fff; }}
-      .heart-title {{ font-weight: 600; font-size: 1.05rem; color: #333; margin-bottom: 10px; }}
-      .heart-row {{ display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 4px 2px 4px; }}
-      .heart {{ font-size: 40px; line-height: 1; display: inline-block; text-shadow: 0 1px 0 rgba(0,0,0,0.06); user-select: none; }}
-      .heart.full {{ color: #e02424; }}
-      .heart.empty {{ color: #E6E6E6; }}
-      .heart-labels {{ display: grid; grid-template-columns: repeat({5}, 1fr); margin-top: 6px; }}
-      .heart-label {{ text-align: center; color: #6b7280; font-size: 0.9rem; }}
-      .heart-sub {{ color: #6b7280; font-size: 0.9rem; margin-top: 6px; }}
-    </style>
-    <div class="heart-wrap">
-      <div class="heart-title">Average rating ({avg_score:.2f})</div>
-      <div class="heart-row">{hearts_html}</div>
-      <div class="heart-labels">{labels_html}</div>
-      {"<div class='heart-sub'>คำตอบ " + f"{responses:,}" + " ข้อ</div>" if responses is not None else ""}
-    </div>
-    """
-    st.markdown(component_html, unsafe_allow_html=True)
-
-def plot_gauge_1_5(series_num: pd.Series, title: str, height: int = 190,
-                     number_font_size: int = 34, key: Optional[str] = None):
-    s = series_num.dropna()
-    if s.empty:
-        st.info(f"ไม่มีข้อมูลสำหรับ '{title}'")
-        return
-    avg = float(s.mean()); n = int(s.size)
-    st.markdown(f"<div class='gauge-head'>{title}</div>", unsafe_allow_html=True)
-    st.markdown(f"<div class='gauge-sub'>n = {n}</div>", unsafe_allow_html=True)
-    steps_4 = [{'range': [1, 2], 'color': '#DC2626'}, {'range': [2, 3], 'color': '#EA580C'}, {'range': [3, 4], 'color': '#F59E0B'}, {'range': [4, 5], 'color': '#16A34A'}]
-    fig = go.Figure(go.Indicator(
-        mode="gauge+number", value=avg, number={'valueformat': '.2f', 'font': {'size': number_font_size}},
-        title={'text': ''}, gauge={'axis': {'range': [1, 5], 'tickmode': 'array', 'tickvals': [1,2,3,4,5]}, 'bar': {'color': '#111827', 'thickness': 0.25}, 'steps': steps_4, 'threshold': {'line': {'color': '#111827', 'width': 2}, 'thickness': 0.6, 'value': avg}}
-    ))
-    fig.update_layout(margin=dict(t=8, r=6, b=6, l=6), height=height)
-    st.plotly_chart(fig, use_container_width=True, key=key or f"gauge_{hash(title)}")
-
-def render_percent_gauge(title: str, pct: float, n: int, height: int = 190, key: Optional[str] = None, number_font_size: int = 34, mode: str = 'high_good'):
-    st.markdown(f"<div class='gauge-head'>{title}</div>", unsafe_allow_html=True)
-    st.markdown(f"<div class='gauge-sub'>n = {n}</div>", unsafe_allow_html=True)
-    if mode == 'high_good':
-        steps_4 = [{'range': [0, 50], 'color': '#DC2626'}, {'range': [50, 65], 'color': '#EA580C'}, {'range': [65, 80], 'color': '#F59E0B'}, {'range': [80, 100],'color': '#16A34A'}]
-    else:
-        steps_4 = [{'range': [0, 5], 'color': '#16A34A'}, {'range': [5, 10], 'color': '#F59E0B'}, {'range': [10, 20], 'color': '#EA580C'}, {'range': [20, 100],'color': '#DC2626'}]
-    fig = go.Figure(go.Indicator(
-        mode="gauge+number", value=float(pct), number={'suffix': '%', 'valueformat': '.1f', 'font': {'size': number_font_size}},
-        title={'text': ''}, gauge={'axis': {'range': [0, 100], 'tickmode': 'array', 'tickvals': [0,20,40,60,80,100]}, 'bar': {'color': '#111827', 'thickness': 0.25}, 'steps': steps_4, 'threshold': {'line': {'color': '#111827', 'width': 2}, 'thickness': 0.6, 'value': float(pct)}}
-    ))
-    fig.update_layout(margin=dict(t=8, r=6, b=6, l=6), height=height)
-    st.plotly_chart(fig, use_container_width=True, key=key or f"gauge_pct_{hash(title)}")
-
-def percent_positive(series: pd.Series, positives=("ใช่",)) -> Tuple[float, int]:
-    s = series.dropna().astype(str).str.strip()
-    n = s.size
-    if n == 0: return 0.0, 0
-    return (s.isin(positives).sum() / n) * 100.0, n
-
-def plot_rating_distribution(series_likert: pd.Series, title: str, key: str):
-    s = series_likert.apply(normalize_to_1_5).dropna().astype(int)
-    if s.empty:
-        st.info(f"ไม่มีข้อมูลสำหรับ '{title}'")
-        return
-    order = [1, 2, 3, 4, 5]
-    counts = s.value_counts().reindex(order, fill_value=0)
-    total = int(counts.sum())
-    perc = (counts / total * 100).round(1)
-    color_map = {1: '#DC2626', 2: '#EA580C', 3: '#F59E0B', 4: '#22C55E', 5: '#16A34A'}
-    fig = go.Figure(go.Bar(
-        x=order, y=[counts[k] for k in order], text=[f"{counts[k]:,} ({perc[k]:.1f}%)" for k in order],
-        textposition='auto', marker_color=[color_map[k] for k in order], customdata=[perc[k] for k in order],
-        hovertemplate="คะแนน %{x}<br>จำนวน %{y:,}<br>คิดเป็น %{customdata:.1f}%<extra></extra>"
-    ))
-    fig.update_layout(title=title, xaxis=dict(tickmode='array', tickvals=order), yaxis_title="จำนวน (responses)", margin=dict(t=40, r=10, b=40, l=50), height=280)
-    st.plotly_chart(fig, use_container_width=True, key=key)
-
-# ==============================================================================
-# MAIN APP LAYOUT (*** Cleaned & Fixed ***)
-# ==============================================================================
-
-# 1. ตั้งค่า Link Google Sheet (IPD)
+# --- Config ---
+DATA_FILE = "mpxi.xlsx" # ไฟล์สำรอง
 SHEET_ID = '11DWvvit4Y50oO-7vebb6etXmvItBe-q1rJaOuezKs4A'
 SHEET_GID = '1977910889'
 GSHEET_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={SHEET_GID}"
@@ -301,27 +200,48 @@ GSHEET_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=c
 df_original = pd.DataFrame()
 data_source_info = ""
 
-# --- Logic ใหม่: ไม่มีการเช็ค uploaded_file แล้ว ---
+# --- Load Data ---
 try:
     df_original = load_and_prepare_data(GSHEET_URL)
-    if df_original.empty:
-        st.warning("ไม่พบข้อมูลใน Google Sheet")
-        st.stop()
+    if df_original.empty: raise Exception("Empty Data")
     data_source_info = "Google Sheets (Real-time 🟢)"
 except Exception as e:
-    st.error(f"⚠️ ไม่สามารถดึงข้อมูลจาก Google Sheets ได้: {e}")
+    if os.path.exists(DATA_FILE):
+        df_original = load_and_prepare_data(DATA_FILE)
+        data_source_info = f"ไฟล์สำรอง: {DATA_FILE} (Offline)"
+        st.sidebar.warning(f"⚠️ เชื่อมต่อ Google Sheet ไม่ได้ ({e}) ระบบจึงแสดงผลข้อมูลจากไฟล์สำรองแทน")
+    else:
+        st.error(f"⚠️ ไม่สามารถดึงข้อมูลจาก Google Sheets และไม่พบไฟล์สำรอง: {e}")
+        st.stop()
+
+if df_original.empty:
+    st.warning("ไม่พบข้อมูลในระบบ")
     st.stop()
 
-# --- แสดงผลปุ่มเรืองแสง ---
+# --- Sidebar: Status & Date ---
 st.sidebar.markdown("---")
-min_d = df_original['date_col'].min().strftime('%d %b %y') if 'date_col' in df_original else "-"
-max_d = df_original['date_col'].max().strftime('%d %b %y') if 'date_col' in df_original else "-"
 
+# 1. ประกาศตัวแปรค่าเริ่มต้นก่อนเสมอ (แก้ปัญหา NameError)
+min_date_str = "N/A"
+max_date_str = "N/A"
+
+# 2. คำนวณค่าถ้ามีข้อมูล
+if 'date_col' in df_original.columns and not df_original['date_col'].isna().all():
+    min_date_str = df_original['date_col'].min().strftime('%d %b %Y')
+    max_date_str = df_original['date_col'].max().strftime('%d %b %Y')
+
+# 3. สร้าง HTML ปุ่ม
 if "Real-time" in data_source_info:
-    source_html = f'''<div class="realtime-badge"><div class="status-dot"></div>{data_source_info}</div>'''
+    source_html = f'''
+        <div class="realtime-badge">
+            <div class="status-dot"></div>
+            {data_source_info}
+        </div>
+    '''
 else:
-    source_html = f'<div style="color:grey;font-size:0.8rem;">📂 {data_source_info}</div>'
+    source_html = f'<div style="margin-top:8px;font-size:0.8rem;color:#666;">📂 {data_source_info}</div>'
 
+# 4. แสดงผล (ตอนนี้ตัวแปรมีค่าแน่นอนแล้ว)
 st.sidebar.markdown(f"""
 <div class="sidebar-info">
     <div class="label">ช่วงวันที่ของข้อมูล</div>
@@ -330,13 +250,13 @@ st.sidebar.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+# --- Filters ---
 st.sidebar.header("ตัวกรองข้อมูล (Filter)")
 available_departments = ['ภาพรวมทั้งหมด'] + sorted(df_original['หน่วยงาน'].dropna().unique().tolist())
 selected_department = st.sidebar.selectbox("เลือกหน่วยงาน:", available_departments)
 time_filter_option = st.sidebar.selectbox("เลือกช่วงเวลา:",
                                           ["ทั้งหมด", "เลือกตามปี", "เลือกตามไตรมาส", "เลือกตามเดือน"])
 
-# Apply filters
 df_filtered = df_original.copy()
 if time_filter_option != "ทั้งหมด" and pd.notna(df_original['date_col']).any():
     year_list = sorted(df_original['ปี'].dropna().unique().astype(int), reverse=True)
@@ -364,85 +284,112 @@ if df_filtered.empty:
     st.stop()
 
 # ==============================================================================
-# PAGE CONTENT
+# DASHBOARD CONTENT
 # ==============================================================================
-logo_urls = [
-    "https://github.com/HOIARRTool/appqtbi/blob/main/messageImage_1763018963411.jpg?raw=true",     
-    "https://github.com/HOIARRTool/appqtbi/blob/main/csm_logo_mfu_3d_colour_15e5a7a50f.png?raw=true"  
-]
-
-st.markdown(
-    f'''
-    <div style="display: flex; justify-content: flex-end; align-items: flex-start; gap: 20px; margin-bottom: 10px;">
-        <img src="{logo_urls[0]}" style="height: 70px; margin-top: 20px;">
-        <img src="{logo_urls[1]}" style="height: 90px;">
-    </div>
-    ''',
-    unsafe_allow_html=True
-)
-
 st.title(f"DASHBOARD: {selected_department}")
 
-# --- Metrics ---
+# --- Helpers ---
+LIKERT_MAP = {'มากที่สุด': 5, 'มาก': 4, 'ปานกลาง': 3, 'น้อย': 2, 'น้อยมาก': 1,
+              ' มากที่สุด': 5, ' มาก': 4, ' ปานกลาง': 3, ' น้อย': 2, ' น้อยมาก': 1}
+
+def normalize_to_1_5(x):
+    if pd.isna(x): return pd.NA
+    s = str(x).strip()
+    if s in LIKERT_MAP: return LIKERT_MAP[s]
+    m = re.search(r'([1-5])', s)
+    if m: return int(m.group(1))
+    for k, v in LIKERT_MAP.items():
+        if k.strip() in s: return v
+    return pd.NA
+
+def render_average_heart_rating(avg_score, max_score=5, responses=None):
+    if pd.isna(avg_score):
+        st.info("ยังไม่มีคะแนนเฉลี่ยให้แสดง")
+        return
+    full = int(avg_score)
+    frac = max(0.0, min(1.0, avg_score - full))
+    hearts_html = ""
+    for i in range(1, max_score + 1):
+        if i <= full: hearts_html += '<span class="heart full">♥</span>'
+        elif i == full + 1 and frac > 0:
+            pct = int(round(frac * 100))
+            hearts_html += f'<span class="heart partial" style="background: linear-gradient(90deg, #e02424 {pct}%, #E6E6E6 {pct}%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent;">♥</span>'
+        else: hearts_html += '<span class="heart empty">♥</span>'
+    labels_html = "".join([f'<span class="heart-label">{i}</span>' for i in range(1, max_score + 1)])
+    st.markdown(f"""<style>.heart-wrap {{ width: 100%; border: 1px solid #eee; border-radius: 12px; padding: 16px; background: #fff; }} .heart {{ font-size: 40px; color: #E6E6E6; }} .heart.full {{ color: #e02424; }} .heart-labels {{ display: grid; grid-template-columns: repeat(5, 1fr); margin-top: 6px; color: #6b7280; text-align: center; }}</style><div class="heart-wrap"><div style="font-weight:600;margin-bottom:10px;">Average rating ({avg_score:.2f})</div><div>{hearts_html}</div><div class="heart-labels">{labels_html}</div>{"<div style='color:#6b7280;font-size:0.9rem;margin-top:6px;'>คำตอบ " + f"{responses:,}" + " ข้อ</div>" if responses else ""}</div>""", unsafe_allow_html=True)
+
+def plot_gauge_1_5(series_num, title, height=200, key=None):
+    s = series_num.dropna()
+    if s.empty:
+        st.info(f"ไม่มีข้อมูลสำหรับ '{title}'")
+        return
+    avg = float(s.mean()); n = int(s.size)
+    st.markdown(f"<div class='gauge-head'>{title}</div><div class='gauge-sub'>n = {n}</div>", unsafe_allow_html=True)
+    steps = [{'range': [1, 2], 'color': '#DC2626'}, {'range': [2, 3], 'color': '#EA580C'}, {'range': [3, 4], 'color': '#F59E0B'}, {'range': [4, 5], 'color': '#16A34A'}]
+    fig = go.Figure(go.Indicator(mode="gauge+number", value=avg, number={'valueformat': '.2f'}, gauge={'axis': {'range': [1, 5]}, 'bar': {'color': '#111827'}, 'steps': steps, 'threshold': {'line': {'color': '#111827', 'width': 2}, 'thickness': 0.6, 'value': avg}}))
+    fig.update_layout(margin=dict(t=10,b=10,l=10,r=10), height=height)
+    st.plotly_chart(fig, use_container_width=True, key=key)
+
+def render_percent_gauge(title, pct, n, height=200, key=None, mode='high_good'):
+    st.markdown(f"<div class='gauge-head'>{title}</div><div class='gauge-sub'>n = {n}</div>", unsafe_allow_html=True)
+    colors = ['#DC2626', '#EA580C', '#F59E0B', '#16A34A'] if mode == 'high_good' else ['#16A34A', '#F59E0B', '#EA580C', '#DC2626']
+    ranges = [[0, 50], [50, 65], [65, 80], [80, 100]] if mode == 'high_good' else [[0, 5], [5, 10], [10, 20], [20, 100]]
+    steps = [{'range': r, 'color': c} for r, c in zip(ranges, colors)]
+    fig = go.Figure(go.Indicator(mode="gauge+number", value=float(pct), number={'suffix': '%', 'valueformat': '.1f'}, gauge={'axis': {'range': [0, 100]}, 'bar': {'color': '#111827'}, 'steps': steps, 'threshold': {'line': {'color': '#111827', 'width': 2}, 'thickness': 0.6, 'value': float(pct)}}))
+    fig.update_layout(margin=dict(t=10,b=10,l=10,r=10), height=height)
+    st.plotly_chart(fig, use_container_width=True, key=key)
+
+def percent_positive(series, positives=("ใช่",)):
+    s = series.dropna().astype(str).str.strip()
+    if s.empty: return 0.0, 0
+    return (s.isin(positives).sum() / s.size) * 100.0, s.size
+
+def plot_rating_distribution(series_likert, title, key):
+    s = series_likert.apply(normalize_to_1_5).dropna().astype(int)
+    if s.empty: return
+    rc = s.value_counts().reindex([1,2,3,4,5], fill_value=0).reset_index()
+    rc.columns = ['คะแนน', 'จำนวน']
+    fig = go.Figure(go.Bar(x=rc['คะแนน'], y=rc['จำนวน'], text=rc['จำนวน'], textposition='auto', marker_color=['#DC2626','#EA580C','#F59E0B','#22C55E','#16A34A']))
+    fig.update_layout(title=title, height=280, margin=dict(t=40,b=40,l=40,r=40))
+    st.plotly_chart(fig, use_container_width=True, key=key)
+
+# --- Metrics Calc ---
 satisfaction_score_map = {'มากที่สุด': 5, 'มาก': 4, 'ปานกลาง': 3, 'น้อย': 2, 'น้อยมาก': 1}
 df_filtered['คะแนนความพึงพอใจ'] = df_filtered['ความพึงพอใจโดยรวม'].map(satisfaction_score_map)
 average_satisfaction_score = df_filtered['คะแนนความพึงพอใจ'].mean()
 display_avg_satisfaction = f"{average_satisfaction_score:.2f}" if pd.notna(average_satisfaction_score) else "N/A"
 total_responses = len(df_filtered)
 
-def calculate_percentage(df: pd.DataFrame, col_name: str, positive_value='ใช่', decimals=1) -> str:
-    if col_name in df.columns and not df[col_name].dropna().empty:
-        count = (df[col_name] == positive_value).sum()
-        total_count = df[col_name].notna().sum()
-        if total_count > 0:
-            return f"{(count / total_count) * 100:.{decimals}f}%"
-    return "N/A"
+return_service_pct, _ = percent_positive(df_filtered['กลับมารับบริการหรือไม่'])
+recommend_pct, _ = percent_positive(df_filtered['แนะนำผู้อื่นหรือไม่'])
+dissatisfied_pct, _ = percent_positive(df_filtered['มีความไม่พึงพอใจหรือไม่'], positives=("มี",))
 
-return_service_pct = calculate_percentage(df_filtered, 'กลับมารับบริการหรือไม่', decimals=1)
-recommend_pct = calculate_percentage(df_filtered, 'แนะนำผู้อื่นหรือไม่', decimals=1)
-dissatisfied_pct = calculate_percentage(df_filtered, 'มีความไม่พึงพอใจหรือไม่', positive_value='มี', decimals=2)
+most_common_health_status = df_filtered['สุขภาพโดยรวม'].mode()[0] if 'สุขภาพโดยรวม' in df_filtered.columns and not df_filtered['สุขภาพโดยรวม'].dropna().empty else "N/A"
 
-most_common_health_status = (
-    df_filtered['สุขภาพโดยรวม'].mode()[0]
-    if 'สุขภาพโดยรวม' in df_filtered.columns and not df_filtered['สุขภาพโดยรวม'].dropna().empty
-    else "N/A"
-)
-
+# --- Layout ---
 st.markdown("##### ภาพรวม")
-row1 = st.columns(3)
-row2 = st.columns(3)
-with row1[0]:
-    st.markdown(f'<div class="metric-box metric-box-1"><div class="label">จำนวนผู้ตอบ</div><div class="value">{total_responses:,}</div></div>', unsafe_allow_html=True)
-with row1[1]:
-    st.markdown(f'<div class="metric-box metric-box-2"><div class="label">คะแนนพึงพอใจเฉลี่ย</div><div class="value">{display_avg_satisfaction}</div></div>', unsafe_allow_html=True)
-with row1[2]:
-    st.markdown(f'<div class="metric-box metric-box-6"><div class="label">สุขภาพผู้ป่วยโดยรวม</div><div class="value" style="font-size: 1.8rem;">{most_common_health_status}</div></div>', unsafe_allow_html=True)
-with row2[0]:
-    st.markdown(f'<div class="metric-box metric-box-3"><div class="label">% กลับมาใช้บริการ</div><div class="value">{return_service_pct}</div></div>', unsafe_allow_html=True)
-with row2[1]:
-    st.markdown(f'<div class="metric-box metric-box-4"><div class="label">% การบอกต่อ</div><div class="value">{recommend_pct}</div></div>', unsafe_allow_html=True)
-with row2[2]:
-    st.markdown(f'<div class="metric-box metric-box-5"><div class="label">% ไม่พึงพอใจ</div><div class="value">{dissatisfied_pct}</div></div>', unsafe_allow_html=True)
+r1c1, r1c2, r1c3 = st.columns(3)
+r1c1.markdown(f'<div class="metric-box metric-box-1"><div class="label">จำนวนผู้ตอบ</div><div class="value">{total_responses:,}</div></div>', unsafe_allow_html=True)
+r1c2.markdown(f'<div class="metric-box metric-box-2"><div class="label">คะแนนพึงพอใจเฉลี่ย</div><div class="value">{display_avg_satisfaction}</div></div>', unsafe_allow_html=True)
+r1c3.markdown(f'<div class="metric-box metric-box-6"><div class="label">สุขภาพผู้ป่วยโดยรวม</div><div class="value" style="font-size: 1.8rem;">{most_common_health_status}</div></div>', unsafe_allow_html=True)
+
+r2c1, r2c2, r2c3 = st.columns(3)
+r2c1.markdown(f'<div class="metric-box metric-box-3"><div class="label">% กลับมาใช้บริการ</div><div class="value">{return_service_pct:.1f}%</div></div>', unsafe_allow_html=True)
+r2c2.markdown(f'<div class="metric-box metric-box-4"><div class="label">% การบอกต่อ</div><div class="value">{recommend_pct:.1f}%</div></div>', unsafe_allow_html=True)
+r2c3.markdown(f'<div class="metric-box metric-box-5"><div class="label">% ไม่พึงพอใจ</div><div class="value">{dissatisfied_pct:.1f}%</div></div>', unsafe_allow_html=True)
 st.markdown("---")
 
-# ===== สรุปจำนวนการประเมิน =====
 if selected_department == 'ภาพรวมทั้งหมด':
     st.subheader("สรุปจำนวนการประเมินตามหน่วยงาน")
-    evaluation_counts = df_filtered['หน่วยงาน'].value_counts().reset_index()
-    evaluation_counts.columns = ['หน่วยงาน', 'จำนวนการประเมิน']
-    st.dataframe(evaluation_counts, use_container_width=True, hide_index=True)
+    st.dataframe(df_filtered['หน่วยงาน'].value_counts().reset_index().rename(columns={'index':'หน่วยงาน', 'หน่วยงาน':'จำนวน'}), use_container_width=True, hide_index=True)
     st.markdown("---")
 
-# ===== ความพึงพอใจโดยรวม =====
 st.subheader("ความพึงพอใจโดยรวม")
 c_left, c_right = st.columns([1, 1])
-with c_left:
-    render_average_heart_rating(average_satisfaction_score, max_score=5, responses=total_responses)
-with c_right:
-    plot_rating_distribution(df_filtered['ความพึงพอใจโดยรวม'], "Distribution ของคะแนน (1–5)", key="dist_overall_ipd")
+with c_left: render_average_heart_rating(average_satisfaction_score, max_score=5, responses=total_responses)
+with c_right: plot_rating_distribution(df_filtered['ความพึงพอใจโดยรวม'], "Distribution ของคะแนน (1–5)", key="dist_overall_ipd")
 st.markdown("---")
 
-# ===== ส่วนที่ 2: ความพึงพอใจต่อบริการ =====
 st.header("ส่วนที่ 2: ความพึงพอใจต่อบริการ (รายหัวข้อ)")
 satisfaction_cols = {
     'Q1_ความสะดวกการรับบริการ': '1. ความสะดวกในการติดต่อและเข้ารับบริการ',
@@ -468,49 +415,31 @@ for pair in col_pairs:
             score_col = f'{col_name}__score'
             if score_col in df_filtered.columns:
                 plot_gauge_1_5(df_filtered[score_col], title, height=200, key=f"g_{col_name}")
-            else:
-                st.info(f"ไม่มีข้อมูลสำหรับ '{title}'")
 
 st.markdown("---")
-
-# ===== ส่วนที่ 3: ความตั้งใจในอนาคต =====
 st.header("ส่วนที่ 3: ความตั้งใจในอนาคตและข้อเสนอแนะ")
 c1, c2, c3 = st.columns(3)
 with c1:
-    pct_return, n_return = percent_positive(df_filtered['กลับมารับบริการหรือไม่'], positives=("ใช่",))
-    render_percent_gauge("1. หากเจ็บป่วยจะกลับมารับบริการหรือไม่ (ตอบ 'ใช่')",
-                         pct_return, n_return, height=200, key="g_future_return", mode='high_good')
+    p1, n1 = percent_positive(df_filtered['กลับมารับบริการหรือไม่'], positives=("ใช่",))
+    render_percent_gauge("1. กลับมารับบริการ (ใช่)", p1, n1, key="gf1")
 with c2:
-    pct_reco, n_reco = percent_positive(df_filtered['แนะนำผู้อื่นหรือไม่'], positives=("ใช่",))
-    render_percent_gauge("2. จะแนะนำผู้อื่นให้มารับบริการหรือไม่ (ตอบ 'ใช่')",
-                         pct_reco, n_reco, height=200, key="g_future_reco", mode='high_good')
+    p2, n2 = percent_positive(df_filtered['แนะนำผู้อื่นหรือไม่'], positives=("ใช่",))
+    render_percent_gauge("2. แนะนำผู้อื่น (ใช่)", p2, n2, key="gf2")
 with c3:
-    pct_dissat, n_dissat = percent_positive(df_filtered['มีความไม่พึงพอใจหรือไม่'], positives=("มี",))
-    render_percent_gauge("3. ไม่พึงพอใจ (ตอบ 'มี')",
-                         pct_dissat, n_dissat, height=200, key="g_future_dissat", mode='low_good')
+    p3, n3 = percent_positive(df_filtered['มีความไม่พึงพอใจหรือไม่'], positives=("มี",))
+    render_percent_gauge("3. ไม่พึงพอใจ (มี)", p3, n3, key="gf3", mode='low_good')
 
-# ===== รายละเอียดความไม่พึงพอใจ =====
 st.subheader("รายละเอียดความไม่พึงพอใจ (หากมี)")
 if 'รายละเอียดความไม่พึงพอใจ' in df_filtered.columns:
-    temp_df = df_filtered[['หน่วยงาน', 'รายละเอียดความไม่พึงพอใจ']].copy()
-    temp_df.dropna(subset=['รายละเอียดความไม่พึงพอใจ'], inplace=True)
-    temp_df['details_stripped'] = temp_df['รายละเอียดความไม่พึงพอใจ'].astype(str).str.strip()
-    dissatisfaction_df = temp_df[(temp_df['details_stripped'] != '') & (temp_df['details_stripped'] != 'ไม่มี')]
-    if not dissatisfaction_df.empty:
-        st.dataframe(dissatisfaction_df[['หน่วยงาน', 'รายละเอียดความไม่พึงพอใจ']],
-                     use_container_width=True, hide_index=True)
-    else:
-        st.info("ไม่พบรายละเอียดความไม่พึงพอใจในช่วงข้อมูลที่เลือก")
+    det = df_filtered[df_filtered['รายละเอียดความไม่พึงพอใจ'].notna()]
+    det = det[~det['รายละเอียดความไม่พึงพอใจ'].astype(str).str.strip().isin(['', 'ไม่มี', '-', 'nan'])]
+    if not det.empty: st.dataframe(det[['หน่วยงาน', 'รายละเอียดความไม่พึงพอใจ']], use_container_width=True, hide_index=True)
+    else: st.info("ไม่พบรายละเอียดความไม่พึงพอใจ")
 
-st.subheader("ความคาดหวังต่อบริการของโรงพยาบาลในภาพรวม")
+st.subheader("ความคาดหวังต่อบริการ")
 target_col = 'ความคาดหวังต่อบริการของโรงพยาบาลในภาพรวม'
-if target_col not in df_filtered.columns and 'ความคาดหวังต่อบริการ' in df_filtered.columns:
-    target_col = 'ความคาดหวังต่อบริการ'
-
+if target_col not in df_filtered.columns and 'ความคาดหวังต่อบริการ' in df_filtered.columns: target_col = 'ความคาดหวังต่อบริการ'
 if target_col in df_filtered.columns:
-    suggestions_df = df_filtered[df_filtered[target_col].notna()][['หน่วยงาน', target_col]]
-    if not suggestions_df.empty:
-        st.dataframe(suggestions_df, use_container_width=True, hide_index=True)
-    else:
-        st.info("ไม่พบข้อมูลความคาดหวังในช่วงข้อมูลที่เลือก")
-
+    sug = df_filtered[df_filtered[target_col].notna()]
+    if not sug.empty: st.dataframe(sug[['หน่วยงาน', target_col]], use_container_width=True, hide_index=True)
+    else: st.info("ไม่พบข้อมูลความคาดหวัง")
