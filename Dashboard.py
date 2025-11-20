@@ -19,7 +19,7 @@ logo_urls = [
 
     "https://github.com/HOIARRTool/appqtbi/blob/main/messageImage_1763018963411.jpg?raw=true",    
     "https://mfu.ac.th/fileadmin/_processed_/6/7/csm_logo_mfu_3d_colour_15e5a7a50f.png",
-
+]
 
 st.sidebar.markdown(
     f'''
@@ -571,6 +571,7 @@ if target_col in df_filtered.columns:
         st.dataframe(suggestions_df, use_container_width=True, hide_index=True)
     else:
         st.info("ไม่พบข้อมูลความคาดหวังในช่วงข้อมูลที่เลือก")
+
 
 
 
