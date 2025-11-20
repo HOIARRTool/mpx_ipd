@@ -18,10 +18,7 @@ st.set_page_config(layout="wide", page_title="Patient Experience Program [IPD]")
 
 # แก้ไขลิงก์: ตัด 'refs/heads/' ออก ให้เหลือแค่ 'main'
 LOGO_URL = "https://raw.githubusercontent.com/HOIARRTool/hoiarr/main/logo1.png"
-logo_urls = [
-    "https://github.com/HOIARRTool/appqtbi/blob/main/messageImage_1763018963411.jpg?raw=true",    
-    "https://mfu.ac.th/fileadmin/_processed_/6/7/csm_logo_mfu_3d_colour_15e5a7a50f.png",
-]
+
 st.sidebar.markdown(
     f'''
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;">
@@ -426,6 +423,23 @@ if df_filtered.empty:
 # PAGE CONTENT (*** UNCHANGED FROM THIS POINT ONWARD ***)
 # ==============================================================================
 
+# 1. กำหนด Link รูปภาพ
+logo_urls = [
+    "https://github.com/HOIARRTool/appqtbi/blob/main/messageImage_1763018963411.jpg?raw=true",    
+    "https://mfu.ac.th/fileadmin/_processed_/6/7/csm_logo_mfu_3d_colour_15e5a7a50f.png"
+]
+
+# 2. สร้างคอลัมน์สำหรับจัดวาง (แบ่งเป็น: โลโก้1 | โลโก้2 | พื้นที่ว่างเหลือๆ)
+
+col1, col2, col3 = st.columns([1, 1, 8])
+
+with col1:
+    st.image(logo_urls[0], use_container_width=True) # แสดงรูปที่ 1
+
+with col2:
+    st.image(logo_urls[1], use_container_width=True) # แสดงรูปที่ 2
+
+# 3. แสดง Title ตามเดิม (ให้อยู่บรรทัดต่อมา)
 st.title(f"DASHBOARD: {selected_department}")
 
 # --- Metrics ---
@@ -574,6 +588,7 @@ if target_col in df_filtered.columns:
         st.dataframe(suggestions_df, use_container_width=True, hide_index=True)
     else:
         st.info("ไม่พบข้อมูลความคาดหวังในช่วงข้อมูลที่เลือก")
+
 
 
 
