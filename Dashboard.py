@@ -221,27 +221,21 @@ if df_original.empty:
 # --- Sidebar: Status & Date ---
 st.sidebar.markdown("---")
 
-# 1. ประกาศตัวแปรค่าเริ่มต้นก่อนเสมอ (แก้ปัญหา NameError)
 min_date_str = "N/A"
 max_date_str = "N/A"
 
-# 2. คำนวณค่าถ้ามีข้อมูล
 if 'date_col' in df_original.columns and not df_original['date_col'].isna().all():
     min_date_str = df_original['date_col'].min().strftime('%d %b %Y')
     max_date_str = df_original['date_col'].max().strftime('%d %b %Y')
 
-# 3. สร้าง HTML ปุ่ม
+# แก้ไขจุดที่ทำให้ Code โผล่: เขียน HTML ให้เป็นบรรทัดเดียว (Single Line)
 if "Real-time" in data_source_info:
-    source_html = f'''
-        <div class="realtime-badge">
-            <div class="status-dot"></div>
-            {data_source_info}
-        </div>
-    '''
+    # เขียนติดกันเลย ไม่ต้องเคาะบรรทัด เพื่อป้องกัน Markdown ตีความผิดเป็น Code Block
+    source_html = f'<div class="realtime-badge"><div class="status-dot"></div>{data_source_info}</div>'
 else:
     source_html = f'<div style="margin-top:8px;font-size:0.8rem;color:#666;">📂 {data_source_info}</div>'
 
-# 4. แสดงผล (ตอนนี้ตัวแปรมีค่าแน่นอนแล้ว)
+# แสดงผล
 st.sidebar.markdown(f"""
 <div class="sidebar-info">
     <div class="label">ช่วงวันที่ของข้อมูล</div>
@@ -443,3 +437,4 @@ if target_col in df_filtered.columns:
     sug = df_filtered[df_filtered[target_col].notna()]
     if not sug.empty: st.dataframe(sug[['หน่วยงาน', target_col]], use_container_width=True, hide_index=True)
     else: st.info("ไม่พบข้อมูลความคาดหวัง")
+
