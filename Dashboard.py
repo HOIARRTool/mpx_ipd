@@ -312,26 +312,15 @@ except Exception as e:
     st.error(f"⚠️ ไม่สามารถดึงข้อมูลจาก Google Sheets ได้: {e}")
     st.stop()
 
-# --- Sidebar Filters ---
-min_date_val = df_original['date_col'].min()
-max_date_val = df_original['date_col'].max()
-
+# --- แสดงผลปุ่มเรืองแสง ---
 st.sidebar.markdown("---")
+min_d = df_original['date_col'].min().strftime('%d %b %y') if 'date_col' in df_original else "-"
+max_d = df_original['date_col'].max().strftime('%d %b %y') if 'date_col' in df_original else "-"
 
-# --- ส่วนแสดงผลปุ่มเรืองแสง (เพิ่มใหม่ให้เหมือน OPD) ---
-min_date_str = "N/A"
-max_date_str = "N/A"
-if pd.notna(min_date_val) and pd.notna(max_date_val):
-    min_date_str = min_date_val.strftime('%d %b %Y')
-    max_date_str = max_date_val.strftime('%d %b %Y')
-
-# สร้าง HTML สำหรับปุ่ม (แบบเรืองแสง)
-source_html = f'''
-    <div class="realtime-badge">
-        <div class="status-dot"></div>
-        {data_source_info}
-    </div>
-'''
+if "Real-time" in data_source_info:
+    source_html = f'''<div class="realtime-badge"><div class="status-dot"></div>{data_source_info}</div>'''
+else:
+    source_html = f'<div style="color:grey;font-size:0.8rem;">📂 {data_source_info}</div>'
 
 st.sidebar.markdown(f"""
 <div class="sidebar-info">
@@ -524,3 +513,4 @@ if target_col in df_filtered.columns:
         st.dataframe(suggestions_df, use_container_width=True, hide_index=True)
     else:
         st.info("ไม่พบข้อมูลความคาดหวังในช่วงข้อมูลที่เลือก")
+
