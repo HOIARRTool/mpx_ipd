@@ -429,17 +429,19 @@ logo_urls = [
     "https://mfu.ac.th/fileadmin/_processed_/6/7/csm_logo_mfu_3d_colour_15e5a7a50f.png"
 ]
 
-# 2. สร้างคอลัมน์สำหรับจัดวาง (แบ่งเป็น: โลโก้1 | โลโก้2 | พื้นที่ว่างเหลือๆ)
+# ใช้ HTML จัดวางแทน columns เพื่อความแม่นยำ
+st.markdown(
+    f'''
+    <div style="display: flex; justify-content: flex-end; align-items: flex-start; gap: 20px; margin-bottom: 10px;">
+        <img src="{logo_urls[0]}" style="height: 50px; margin-top: 15px;">
+        
+        <img src="{logo_urls[1]}" style="height: 70px;">
+    </div>
+    ''',
+    unsafe_allow_html=True
+)
 
-col1, col2, col3 = st.columns([1, 1, 8])
-
-with col1:
-    st.image(logo_urls[0], use_column_width=True)
-
-with col2:
-    st.image(logo_urls[1], use_column_width=True)
-
-# 3. แสดง Title ตามเดิม (ให้อยู่บรรทัดต่อมา)
+# แสดง Title
 st.title(f"DASHBOARD: {selected_department}")
 
 # --- Metrics ---
@@ -588,6 +590,7 @@ if target_col in df_filtered.columns:
         st.dataframe(suggestions_df, use_container_width=True, hide_index=True)
     else:
         st.info("ไม่พบข้อมูลความคาดหวังในช่วงข้อมูลที่เลือก")
+
 
 
 
