@@ -11,11 +11,15 @@ import re
 from typing import Optional, Tuple, Any
 
 # ==============================================================================
-# PAGE CONFIGURATION & STYLING
+# PAGE CONFIGURATION
 # ==============================================================================
-st.set_page_config(layout="wide", page_title="Patient Experience Program [IPD]")
-
 LOGO_URL = "https://raw.githubusercontent.com/HOIARRTool/hoiarr/refs/heads/main/logo1.png"
+st.set_page_config(layout="wide", page_title="Patient Experience Program [IPD]")
+logo_urls = [
+
+    "https://github.com/HOIARRTool/appqtbi/blob/main/messageImage_1763018963411.jpg?raw=true",    
+    "https://mfu.ac.th/fileadmin/_processed_/6/7/csm_logo_mfu_3d_colour_15e5a7a50f.png",
+
 
 st.sidebar.markdown(
     f'''
@@ -90,8 +94,7 @@ st.markdown("""
 # ==============================================================================
 # DATA LOADING AND PREPARATION (*** MODIFIED SECTION ***)
 # ==============================================================================
-
-@st.cache_data
+@st.cache_data(ttl=300)
 def load_and_prepare_data(source: Any) -> pd.DataFrame:
     """
     Loads data from a file path or a Streamlit UploadedFile object.
@@ -327,42 +330,44 @@ def plot_rating_distribution(series_likert: pd.Series, title: str, key: str):
 # ==============================================================================
 # MAIN APP LAYOUT (*** MODIFIED SECTION ***)
 # ==============================================================================
-
-# --- Sidebar: File Uploader ---
+# --- Sidebar: File Uploader (ยังเก็บไว้เผื่ออยากดูไฟล์เก่า) ---
 st.sidebar.markdown("---")
 st.sidebar.header("จัดการข้อมูล")
 uploaded_file = st.sidebar.file_uploader(
-    "อัปโหลดไฟล์ใหม่ (CSV or XLSX)",
-    type=['csv', 'xlsx'],
-    help="หากไม่อัปโหลด โปรแกรมจะพยายามโหลดไฟล์ 'mpxi.xlsx' ที่อยู่ในโฟลเดอร์เดียวกันโดยอัตโนมัติ"
+    "อัปโหลดไฟล์ใหม่ (กรณีไม่ใช้ Real-time)",
+    type=['csv', 'xlsx']
 )
 
-# --- Data Loading Logic ---
-DEFAULT_FILE = "mpxi.xlsx"
+# --- Data Loading Logic (Real-time Google Sheet) ---
+
+# 1. ตั้งค่า Link Google Sheet ของคุณ
+SHEET_ID = '11DWvvit4Y50oO-7vebb6etXmvItBe-q1rJaOuezKs4A'
+SHEET_GID = '1977910889' # เอามาจากเลขหลัง gid= ในลิงก์ของคุณ
+# สร้าง URL สำหรับ Export เป็น CSV
+GSHEET_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={SHEET_GID}"
+
 df_original = pd.DataFrame()
 data_source_info = ""
 
-# Determine the data source: uploaded file takes priority over the default local file.
-data_source = None
+# Logic: ถ้ามีการอัปโหลดไฟล์ ให้ใช้ไฟล์อัปโหลดก่อน / ถ้าไม่มี ให้ดึง Real-time จาก Google Sheet
 if uploaded_file is not None:
     data_source = uploaded_file
     data_source_info = f"ไฟล์ที่อัปโหลด: `{uploaded_file.name}`"
-elif os.path.exists(DEFAULT_FILE):
-    data_source = DEFAULT_FILE
-    data_source_info = f"ไฟล์เริ่มต้น: `{DEFAULT_FILE}`"
-
-# Load data if a source has been identified
-if data_source:
     df_original = load_and_prepare_data(data_source)
+else:
+    try:
+        # ใช้ URL ส่งเข้าไปในฟังก์ชันเดิมได้เลย (pd.read_csv รองรับ URL)
+        df_original = load_and_prepare_data(GSHEET_URL)
+        data_source_info = "Google Sheets (Real-time 🟢)"
+    except Exception as e:
+        st.error(f"⚠️ ไม่สามารถดึงข้อมูลจาก Google Sheets ได้: {e}")
+        st.info("คำแนะนำ: กรุณาตรวจสอบว่าตั้งค่า Share Google Sheet เป็น 'Anyone with the link' หรือยัง")
+        st.stop()
 
-# Stop execution if no data is available from any source
+# Stop execution if no data is available
 if df_original.empty:
-    st.warning(
-        "ไม่พบข้อมูล 😥 กรุณาอัปโหลดไฟล์ข้อมูล หรือ "
-        f"วางไฟล์ `{DEFAULT_FILE}` ไว้ในโฟลเดอร์เดียวกับโปรแกรม"
-    )
+    st.warning("ไม่พบข้อมูลใน Google Sheet")
     st.stop()
-
 # --- Sidebar Filters ---
 min_date_val = df_original['date_col'].min()
 max_date_val = df_original['date_col'].max()
@@ -566,5 +571,6 @@ if target_col in df_filtered.columns:
         st.dataframe(suggestions_df, use_container_width=True, hide_index=True)
     else:
         st.info("ไม่พบข้อมูลความคาดหวังในช่วงข้อมูลที่เลือก")
+
 
 
