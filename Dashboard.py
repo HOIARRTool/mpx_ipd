@@ -8,11 +8,37 @@ from pathlib import Path
 import os
 import re
 from typing import Optional, Tuple, Any
+import plotly.io as pio
+pio.templates.default = "plotly_white"
+
 
 # ==============================================================================
 # PAGE CONFIGURATION
 # ==============================================================================
 st.set_page_config(layout="wide", page_title="Patient Experience Program [IPD]")
+
+# Force white background
+st.markdown("""
+<style>
+    :root {
+        color-scheme: light !important;
+    }
+
+    [data-testid="stAppViewContainer"],
+    [data-testid="stMain"],
+    [data-testid="stSidebar"],
+    [data-testid="stHeader"] {
+        background-color: #FFFFFF !important;
+        color: #172033 !important;
+    }
+
+    [data-testid="stMarkdownContainer"],
+    [data-testid="stWidgetLabel"] {
+        color: #172033 !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 
 # --- CSS & LOGO ---
 LOGO_URL = "https://raw.githubusercontent.com/HOIARRTool/hoiarr/main/logo1.png"
