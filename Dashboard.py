@@ -143,47 +143,83 @@ def load_and_prepare_data(source: Any) -> pd.DataFrame:
             else:
                 df = pd.read_csv(source)
     except Exception as e:
-        # st.error(f"เกิดข้อผิดพลาดในการอ่านไฟล์ข้อมูล: {e}")
-        return pd.DataFrame()
+        raise RuntimeError(f"ไม่สามารถอ่านข้อมูลได้: {e}") from e
 
-    # --- Data Cleaning ---
-    column_mapping = {
-        'หอผู้ป่วยที่ท่านเข้ารับบริการ/ ต้องการประเมิน \n(เพื่อสะท้อนกลับหน่วยงานโดยตรง)': 'หน่วยงาน',
-        'ส่วนที่ 1 ข้อมูลทั่วไปของผู้ตอบแบบประเมิน\n1. เพศ': 'เพศ',
-        '2. อายุ': 'อายุ', '3. ภูมิลำเนา': 'ภูมิลำเนา', '4. อาชีพ': 'อาชีพ', '5. สิทธิในการรักษา': 'สิทธิการรักษา',
-        '6. วันที่มารับบริการ': 'วันที่รับบริการ',
-        'จำนวนวันนอนรักษาที่โรงพยาบาล': 'วันนอน',
-        'ความพึงพอใจต่อบริการของโรงพยาบาลในภาพรวม': 'ความพึงพอใจโดยรวม',
-        '2. ท่านคิดว่าสุขภาพโดยรวมของท่าน (ณ ตอนนี้) เป็นอย่างไร': 'สุขภาพโดยรวม',
-        'แบบประเมิน [1. ขั้นตอนการติดต่อและเข้ารับการรักษาในโรงพยาบาล (Admissions) มีความสะดวกเพียงใด]': 'Q1_ความสะดวกการรับบริการ',
-        'แบบประเมิน [2. ขณะนอนโรงพยาบาลครั้งนี้ แพทย์ พยาบาลและเจ้าหน้าที่ รับฟังและเปิดโอกาสให้ท่านซักถามข้อสงสัยได้มากน้อยเพียงใด]': 'Q2_การรับฟัง',
-        'แบบประเมิน [3. ขณะนอนโรงพยาบาลครั้งนี้ แพทย์ พยาบาลและเจ้าหน้าที่ให้ข้อมูลเกี่ยวกับขั้นตอนการรับบริการได้ชัดเจนเพียงใด]': 'Q3_ความชัดเจนข้อมูลบริการ',
-        'แบบประเมิน [4. ขณะนอนโรงพยาบาล ท่านรู้สึกว่าบุคลากรทุกคนดูแลท่านอย่างเท่าเทียมและให้เกียรติหรือไม่]': 'Q4_ความเท่าเทียม',
-        'แบบประเมิน [5. โรงพยาบาลมีความสะอาด และมีสิ่งอำนวยความสะดวกเพียงพอต่อความต้องการของท่าน]': 'Q5_ความสะอาดและสิ่งอำนวยความสะดวก',
-        'แบบประเมิน [6. เมื่อท่านต้องการความช่วยเหลือ (เช่น กดปุ่มเรียกพยาบาล) ท่านได้รับตอบสนองอย่างเหมาะสม]': 'Q6_การตอบสนอง',
-        'แบบประเมิน [7. ขณะนอนโรงพยาบาล ท่านได้รับข้อมูลเกี่ยวกับค่าใช้จ่ายที่อาจเกิดขึ้นอย่างต่อเนื่องและชัดเจนเพียงใด]': 'Q7_ข้อมูลค่าใช้จ่าย',
-        'แบบประเมิน [8. ขณะนอนโรงพยาบาล ท่านได้รับข้อมูลการรักษา อาการแทรกซ้อนระหว่างการรักษาพยาบาล]': 'Q8_ข้อมูลการรักษา',
-        'แบบประเมิน [9. ท่านและครอบครัว ได้มีส่วนร่วมในการวางแผนการรักษาและการปฏิบัติตัวร่วมกับ ทีมผู้ให้การรักษาอย่างเหมาะสมหรือไม่]': 'Q9_การมีส่วนร่วมวางแผน',
-        'แบบประเมิน [10. ท่านได้รับข้อมูลยา ผลข้างเคียงของยา และวิธีการใช้ยาอย่างชัดเจนเพียงใด]': 'Q10_ข้อมูลด้านยา',
-        '1. หากท่านมีอาการเจ็บป่วย ท่านจะพิจารณากลับมารับบริการ ที่โรงพยาบาลแห่งนี้หรือไม่': 'กลับมารับบริการหรือไม่',
-        '2. หากมีโอกาสท่านจะแนะนำผู้อื่นให้มารับบริการที่โรงพยาบาลแห่งนี้หรือไม่': 'แนะนำผู้อื่นหรือไม่',
-        '3. ท่านมีความไม่พึงพอใจในการมาใช้บริการที่โรงพยาบาลนี้หรือไม่': 'มีความไม่พึงพอใจหรือไม่',
-        '(หากมี) ความไม่พึงพอใจกรุณาระบุรายละเอียด เพื่อเป็นประโยชน์ในการปรับปรุง': 'รายละเอียดความไม่พึงพอใจ',
-        'ข้อเสนอแนะเพิ่มเติมเพื่อการพัฒนาคุณภาพโรงพยาบาล': 'ความคาดหวังต่อบริการ'
+    # --- Data Cleaning (supports multiple Google Form question versions) ---
+    # Match normalized titles, rather than brittle exact whitespace/newline strings.
+    def clean_header(value):
+        return re.sub(r"\s+", " ", str(value)).strip()
+
+    df.columns = [clean_header(c) for c in df.columns]
+    original_cols = list(df.columns)
+
+    def pick_columns(*patterns):
+        return [col for col in original_cols if any(re.search(p, col) for p in patterns)]
+
+    def combine_as(target, candidates):
+        # Keep the first non-empty answer within each response row. Never sum
+        # duplicate question variants: one response must count at most once.
+        columns = [c for c in candidates if c in df.columns]
+        if not columns:
+            df[target] = pd.NA
+            return
+        parts = df[columns].copy()
+        for c in columns:
+            parts[c] = parts[c].astype('string').str.strip().replace('', pd.NA)
+        merged = parts[columns[0]]
+        for candidate in columns[1:]:
+            merged = merged.combine_first(parts[candidate])
+        df[target] = merged
+
+    combined = {
+        'หน่วยงาน': pick_columns(r'^หอผู้ป่วยที่ท่านเข้ารับบริการ'),
+        'สุขภาพโดยรวม': pick_columns(r'สุขภาพโดยรวมของท่าน'),
+        'ความพึงพอใจโดยรวม': pick_columns(r'^ความพึงพอใจต่อบริการของโรงพยาบาลในภาพรวม$'),
+        'กลับมารับบริการหรือไม่': pick_columns(r'^1\. หากท่านมีอาการเจ็บป่วย'),
+        'แนะนำผู้อื่นหรือไม่': pick_columns(r'^2\. หากมีโอกาสท่านจะแนะนำ'),
+        'มีความไม่พึงพอใจหรือไม่': pick_columns(r'^3\. ท่านมีความไม่พึงพอใจ'),
+        'รายละเอียดความไม่พึงพอใจ': pick_columns(r'^\(หากมี\) ความไม่พึงพอใจ'),
+        'ความคาดหวังต่อบริการ': pick_columns(r'^ความคาดหวังต่อบริการของโรงพยาบาลในภาพรวม$', r'^ข้อเสนอแนะเพิ่มเติมเพื่อการพัฒนาคุณภาพโรงพยาบาล$'),
+        'ความเชื่อมั่นต่อบริการทางการแพทย์': pick_columns(r'^ความเชื่อมั่นที่มีต่อบริการทางการแพทย์'),
+        'ความพึงพอใจต่อการจัดการข้อร้องเรียน': pick_columns(r'^หากท่านเคยระบุความไม่พึงพอใจหรือส่งเรื่องร้องเรียน'),
     }
-    df = df.rename(columns=lambda c: column_mapping.get(c.strip(), c.strip()))
+    # Prioritize the numeric 'แบบประเมิน [...]' version; fall back to the
+    # subsequently renamed 'ส่วน ความพึงพอใจ...' version and then old text.
+    questions = [
+        ('Q1_ความสะดวกการรับบริการ', 'ขั้นตอนการติดต่อและเข้ารับการรักษาในโรงพยาบาล'),
+        ('Q2_การรับฟัง', 'รับฟังและเปิดโอกาสให้ท่านซักถาม'),
+        ('Q3_ความชัดเจนข้อมูลบริการ', 'ให้ข้อมูลเกี่ยวกับขั้นตอนการรับบริการได้ชัดเจน'),
+        ('Q4_ความเท่าเทียม', 'ดูแลท่านอย่างเท่าเทียมและให้เกียรติ'),
+        ('Q5_ความสะอาดและสิ่งอำนวยความสะดวก', 'ความสะอาด และมีสิ่งอำนวยความสะดวก'),
+        ('Q6_การตอบสนอง', 'เมื่อท่านต้องการความช่วยเหลือ'),
+        ('Q7_ข้อมูลค่าใช้จ่าย', 'ข้อมูลเกี่ยวกับค่าใช้จ่าย'),
+        ('Q8_ข้อมูลการรักษา', 'ข้อมูลการรักษา อาการแทรกซ้อน'),
+        ('Q9_การมีส่วนร่วมวางแผน', 'มีส่วนร่วมในการวางแผนการรักษา'),
+        ('Q10_ข้อมูลด้านยา', 'ได้รับข้อมูลยา ผลข้างเคียง'),
+    ]
+    for alias, phrase in questions:
+        matches = [c for c in original_cols if phrase in c]
+        ranked = sorted(matches, key=lambda c: (
+            0 if c.startswith('แบบประเมิน [') else
+            1 if c.startswith('ส่วน ความพึงพอใจ') else 2,
+            original_cols.index(c)))
+        combined[alias] = ranked
 
+    for alias, candidates in combined.items():
+        combine_as(alias, candidates)
+
+    # Google Forms timestamp: parse day-first DD/MM/YYYY, optionally with time.
     if 'ประทับเวลา' in df.columns:
         df['date_col'] = pd.to_datetime(df['ประทับเวลา'], dayfirst=True, errors='coerce')
-        df = df.dropna(subset=['date_col'])
+        df = df.dropna(subset=['date_col']).copy()
         df['เดือน'] = df['date_col'].dt.month
         df['ไตรมาส'] = df['date_col'].dt.quarter
         df['ปี'] = df['date_col'].dt.year
     else:
         df['date_col'] = pd.NaT
-        df['เดือน'] = None
-        df['ไตรมาส'] = None
-        df['ปี'] = None
+        df['เดือน'] = pd.NA
+        df['ไตรมาส'] = pd.NA
+        df['ปี'] = pd.NA
 
     return df
 
@@ -203,13 +239,17 @@ data_source_info = ""
 # --- Load Data ---
 try:
     df_original = load_and_prepare_data(GSHEET_URL)
-    if df_original.empty: raise Exception("Empty Data")
+    if df_original.empty: raise ValueError("Empty Data")
     data_source_info = "Google Sheets (Real-time 🟢)"
 except Exception as e:
     if os.path.exists(DATA_FILE):
-        df_original = load_and_prepare_data(DATA_FILE)
-        data_source_info = f"ไฟล์สำรอง: {DATA_FILE} (Offline)"
-        st.sidebar.warning(f"⚠️ เชื่อมต่อ Google Sheet ไม่ได้ ({e}) ระบบจึงแสดงผลข้อมูลจากไฟล์สำรองแทน")
+        try:
+            df_original = load_and_prepare_data(DATA_FILE)
+            data_source_info = f"ไฟล์สำรอง: {DATA_FILE} (Offline)"
+            st.sidebar.warning(f"⚠️ เชื่อมต่อ Google Sheet ไม่ได้ ({e}) ระบบจึงแสดงผลข้อมูลจากไฟล์สำรองแทน")
+        except Exception as fallback_error:
+            st.error(f"ไม่สามารถอ่านข้อมูลสำรองได้: {fallback_error}")
+            st.stop()
     else:
         st.error(f"⚠️ ไม่สามารถดึงข้อมูลจาก Google Sheets และไม่พบไฟล์สำรอง: {e}")
         st.stop()
@@ -283,17 +323,25 @@ if df_filtered.empty:
 st.title(f"DASHBOARD: {selected_department}")
 
 # --- Helpers ---
-LIKERT_MAP = {'มากที่สุด': 5, 'มาก': 4, 'ปานกลาง': 3, 'น้อย': 2, 'น้อยมาก': 1,
-              ' มากที่สุด': 5, ' มาก': 4, ' ปานกลาง': 3, ' น้อย': 2, ' น้อยมาก': 1}
+LIKERT_MAP = {
+    'มากที่สุด': 5, 'มาก': 4, 'ปานกลาง': 3, 'น้อย': 2, 'น้อยมาก': 1,
+    'ดีมาก': 5, 'ดี': 4, 'พอใช้': 3, 'ควรปรับปรุง': 2, 'ต้องปรับปรุง': 1,
+    'ยอดเยี่ยม': 5,
+}
 
 def normalize_to_1_5(x):
-    if pd.isna(x): return pd.NA
+    if pd.isna(x):
+        return pd.NA
     s = str(x).strip()
-    if s in LIKERT_MAP: return LIKERT_MAP[s]
-    m = re.search(r'([1-5])', s)
-    if m: return int(m.group(1))
-    for k, v in LIKERT_MAP.items():
-        if k.strip() in s: return v
+    if s in LIKERT_MAP:
+        return LIKERT_MAP[s]
+    if re.fullmatch(r'[1-5](?:\.0+)?', s):
+        return int(float(s))
+    # Common legacy questionnaire wording.
+    legacy = {'สะดวกมาก': 5, 'สะดวก': 4, 'ไม่สะดวก': 2,
+              'ไม่สะดวกเลย': 1, 'ดีมากที่สุด': 5}
+    if s in legacy:
+        return legacy[s]
     return pd.NA
 
 def render_average_heart_rating(avg_score, max_score=5, responses=None):
@@ -360,6 +408,9 @@ def plot_gauge_1_5(series_num, title, height=GAUGE_H, key=None):
 
 def render_percent_gauge(title, pct, n, height=GAUGE_H, key=None, mode='high_good'):
     st.markdown(f"<div class='gauge-head'>{title}</div><div class='gauge-sub'>n = {n}</div>", unsafe_allow_html=True)
+    if n == 0 or pd.isna(pct):
+        st.info("ยังไม่มีคำตอบสำหรับคำถามนี้ในช่วงเวลาที่เลือก")
+        return
 
     colors = ['#DC2626', '#EA580C', '#F59E0B', '#16A34A'] if mode == 'high_good' else ['#16A34A', '#F59E0B', '#EA580C', '#DC2626']
     ranges = [[0, 50], [50, 65], [65, 80], [80, 100]] if mode == 'high_good' else [[0, 5], [5, 10], [10, 20], [20, 100]]
@@ -390,7 +441,7 @@ def render_percent_gauge(title, pct, n, height=GAUGE_H, key=None, mode='high_goo
 
 def percent_positive(series, positives=("ใช่",)):
     s = series.dropna().astype(str).str.strip()
-    if s.empty: return 0.0, 0
+    if s.empty: return float('nan'), 0
     return (s.isin(positives).sum() / s.size) * 100.0, s.size
 
 def plot_rating_distribution(series_likert, title, key):
@@ -404,10 +455,14 @@ def plot_rating_distribution(series_likert, title, key):
 
 # --- Metrics Calc ---
 satisfaction_score_map = {'มากที่สุด': 5, 'มาก': 4, 'ปานกลาง': 3, 'น้อย': 2, 'น้อยมาก': 1}
-df_filtered['คะแนนความพึงพอใจ'] = df_filtered['ความพึงพอใจโดยรวม'].map(satisfaction_score_map)
+df_filtered['คะแนนความพึงพอใจ'] = pd.to_numeric(df_filtered['ความพึงพอใจโดยรวม'].apply(normalize_to_1_5), errors='coerce')
 average_satisfaction_score = df_filtered['คะแนนความพึงพอใจ'].mean()
 display_avg_satisfaction = f"{average_satisfaction_score:.2f}" if pd.notna(average_satisfaction_score) else "N/A"
 total_responses = len(df_filtered)
+
+def format_pct(x):
+    return f"{x:.1f}%" if pd.notna(x) else "N/A"
+
 
 return_service_pct, _ = percent_positive(df_filtered['กลับมารับบริการหรือไม่'])
 recommend_pct, _ = percent_positive(df_filtered['แนะนำผู้อื่นหรือไม่'])
@@ -423,9 +478,9 @@ r1c2.markdown(f'<div class="metric-box metric-box-2"><div class="label">คะ�
 r1c3.markdown(f'<div class="metric-box metric-box-6"><div class="label">สุขภาพผู้ป่วยโดยรวม</div><div class="value" style="font-size: 1.8rem;">{most_common_health_status}</div></div>', unsafe_allow_html=True)
 
 r2c1, r2c2, r2c3 = st.columns(3)
-r2c1.markdown(f'<div class="metric-box metric-box-3"><div class="label">% กลับมาใช้บริการ</div><div class="value">{return_service_pct:.1f}%</div></div>', unsafe_allow_html=True)
-r2c2.markdown(f'<div class="metric-box metric-box-4"><div class="label">% การบอกต่อ</div><div class="value">{recommend_pct:.1f}%</div></div>', unsafe_allow_html=True)
-r2c3.markdown(f'<div class="metric-box metric-box-5"><div class="label">% ไม่พึงพอใจ</div><div class="value">{dissatisfied_pct:.1f}%</div></div>', unsafe_allow_html=True)
+r2c1.markdown(f'<div class="metric-box metric-box-3"><div class="label">% กลับมาใช้บริการ</div><div class="value">{format_pct(return_service_pct)}</div></div>', unsafe_allow_html=True)
+r2c2.markdown(f'<div class="metric-box metric-box-4"><div class="label">% การบอกต่อ</div><div class="value">{format_pct(recommend_pct)}</div></div>', unsafe_allow_html=True)
+r2c3.markdown(f'<div class="metric-box metric-box-5"><div class="label">% ไม่พึงพอใจ</div><div class="value">{format_pct(dissatisfied_pct)}</div></div>', unsafe_allow_html=True)
 st.markdown("---")
 
 if selected_department == 'ภาพรวมทั้งหมด':
@@ -494,3 +549,32 @@ if target_col in df_filtered.columns:
     else: st.info("ไม่พบข้อมูลความคาดหวัง")
 
 
+
+# ============================================================================
+# NEW QUESTIONS: Patient confidence and complaint-handling experience
+# ============================================================================
+st.markdown("---")
+st.header("ส่วนที่ 4: ความเชื่อมั่นและการจัดการข้อร้องเรียน (ข้อคำถามเพิ่มเติม)")
+st.caption("แสดงเฉพาะผู้ที่ตอบแต่ละข้อ; การไม่ตอบในแบบสอบถามย้อนหลังไม่ถือเป็นคะแนน 0")
+
+new_questions = [
+    ("ความเชื่อมั่นต่อบริการทางการแพทย์", "ความเชื่อมั่นต่อบริการทางการแพทย์"),
+    ("ความพึงพอใจต่อการจัดการข้อร้องเรียน", "ความพึงพอใจต่อการจัดการข้อร้องเรียน (เฉพาะผู้ตอบ)"),
+]
+cols = st.columns(2)
+for i, (field, title) in enumerate(new_questions):
+    with cols[i]:
+        values = df_filtered[field].apply(normalize_to_1_5)
+        scores = pd.to_numeric(values, errors='coerce').dropna()
+        if len(scores):
+            plot_gauge_1_5(scores, title, height=200, key=f"new_gauge_{i}")
+            st.caption(f"จำนวนคำตอบที่นำมาคำนวณ: {len(scores):,} ราย")
+        else:
+            st.markdown(f"<div class='gauge-head'>{title}</div>", unsafe_allow_html=True)
+            st.info("ยังไม่มีข้อมูลที่แปลงเป็นคะแนนได้")
+        raw = df_filtered[field].astype('string').str.strip().replace('', pd.NA).dropna()
+        unknown = raw[raw.apply(normalize_to_1_5).isna()]
+        if len(unknown):
+            st.warning(f"มีคำตอบ {len(unknown):,} รายที่ยังไม่สามารถแปลงเป็นคะแนนได้: {', '.join(unknown.unique()[:5])}")
+
+st.caption("เกณฑ์แปลงคำตอบสำหรับข้อใหม่: ดีมาก=5, ดี=4, ปานกลาง/พอใช้=3, ควรปรับปรุง=2, ต้องปรับปรุง=1; โปรดตรวจทานระดับคำตอบใน Google Forms ก่อนใช้เป็นรายงานทางการ")
