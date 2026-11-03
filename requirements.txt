@@ -1,4 +1,8 @@
-streamlit==1.32.2
-pandas==2.1.4
-plotly==5.18.0
-openpyxl==3.1.2
+# Patient Experience IPD - Python 3.11 / Render
+# Compatible with PyArrow builds requiring NumPy 2.x
+streamlit>=1.40,<2
+pandas>=2.2.2,<3
+numpy>=2.0,<3
+pyarrow>=17,<27
+plotly>=5.20,<7
+openpyxl>=3.1,<4
