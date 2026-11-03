@@ -285,30 +285,63 @@ st.sidebar.markdown(f"""
 """, unsafe_allow_html=True)
 
 # --- Filters ---
+# Stable explicit widget keys avoid identity changes after data refresh/redeployment.
+# Validate saved choices against current data before constructing the widgets.
 st.sidebar.header("ตัวกรองข้อมูล (Filter)")
-available_departments = ['ภาพรวมทั้งหมด'] + sorted(df_original['หน่วยงาน'].dropna().unique().tolist())
-selected_department = st.sidebar.selectbox("เลือกหน่วยงาน:", available_departments)
-time_filter_option = st.sidebar.selectbox("เลือกช่วงเวลา:",
-                                          ["ทั้งหมด", "เลือกตามปี", "เลือกตามไตรมาส", "เลือกตามเดือน"])
+
+available_departments = ['ภาพรวมทั้งหมด'] + sorted(
+    str(x).strip() for x in df_original['หน่วยงาน'].dropna().unique()
+    if str(x).strip()
+)
+
+def stable_choice(key, options, default=None):
+    """Initialize/reset stale filter values after a data/schema change."""
+    if not options:
+        return None
+    if default is None or default not in options:
+        default = options[0]
+    if key not in st.session_state or st.session_state[key] not in options:
+        st.session_state[key] = default
+    return st.session_state[key]
+
+stable_choice('ipd_department_v2', available_departments, 'ภาพรวมทั้งหมด')
+selected_department = st.sidebar.selectbox(
+    "เลือกหน่วยงาน:", available_departments, key='ipd_department_v2'
+)
+period_options = ["ทั้งหมด", "เลือกตามปี", "เลือกตามไตรมาส", "เลือกตามเดือน"]
+stable_choice('ipd_period_v2', period_options, 'ทั้งหมด')
+time_filter_option = st.sidebar.selectbox(
+    "เลือกช่วงเวลา:", period_options, key='ipd_period_v2'
+)
 
 df_filtered = df_original.copy()
-if time_filter_option != "ทั้งหมด" and pd.notna(df_original['date_col']).any():
-    year_list = sorted(df_original['ปี'].dropna().unique().astype(int), reverse=True)
-    selected_year = st.sidebar.selectbox("เลือกปี:", year_list)
-    df_filtered = df_filtered[df_filtered['ปี'] == selected_year]
+if time_filter_option != "ทั้งหมด" and df_original['date_col'].notna().any():
+    year_list = sorted(df_original['ปี'].dropna().unique().astype(int).tolist(), reverse=True)
+    if year_list:
+        stable_choice('ipd_year_v2', year_list)
+        selected_year = st.sidebar.selectbox("เลือกปี:", year_list, key='ipd_year_v2')
+        df_filtered = df_filtered[df_filtered['ปี'] == selected_year]
 
-    if time_filter_option in ["เลือกตามไตรมาส", "เลือกตามเดือน"]:
         if time_filter_option == "เลือกตามไตรมาส":
-            quarter_list = sorted(df_filtered['ไตรมาส'].dropna().unique().astype(int))
-            selected_quarter = st.sidebar.selectbox("เลือกไตรมาส:", quarter_list)
-            df_filtered = df_filtered[df_filtered['ไตรมาส'] == selected_quarter]
+            quarter_list = sorted(df_filtered['ไตรมาส'].dropna().unique().astype(int).tolist())
+            if quarter_list:
+                stable_choice('ipd_quarter_v2', quarter_list)
+                selected_quarter = st.sidebar.selectbox(
+                    "เลือกไตรมาส:", quarter_list, key='ipd_quarter_v2'
+                )
+                df_filtered = df_filtered[df_filtered['ไตรมาส'] == selected_quarter]
         elif time_filter_option == "เลือกตามเดือน":
-            month_map = {1: 'ม.ค.', 2: 'ก.พ.', 3: 'มี.ค.', 4: 'เม.ย.', 5: 'พ.ค.', 6: 'มิ.ย.', 7: 'ก.ค.', 8: 'ส.ค.',
-                         9: 'ก.ย.', 10: 'ต.ค.', 11: 'พ.ย.', 12: 'ธ.ค.'}
-            month_list = sorted(df_filtered['เดือน'].dropna().unique().astype(int))
-            selected_month_num = st.sidebar.selectbox("เลือกเดือน:", month_list,
-                                                      format_func=lambda x: month_map.get(x, x))
-            df_filtered = df_filtered[df_filtered['เดือน'] == selected_month_num]
+            month_map = {1:'ม.ค.', 2:'ก.พ.', 3:'มี.ค.', 4:'เม.ย.', 5:'พ.ค.', 6:'มิ.ย.',
+                         7:'ก.ค.', 8:'ส.ค.', 9:'ก.ย.', 10:'ต.ค.', 11:'พ.ย.', 12:'ธ.ค.'}
+            month_list = sorted(df_filtered['เดือน'].dropna().unique().astype(int).tolist())
+            if month_list:
+                stable_choice('ipd_month_v2', month_list)
+                selected_month_num = st.sidebar.selectbox(
+                    "เลือกเดือน:", month_list,
+                    format_func=lambda x: month_map.get(x, str(x)),
+                    key='ipd_month_v2'
+                )
+                df_filtered = df_filtered[df_filtered['เดือน'] == selected_month_num]
 
 if selected_department != 'ภาพรวมทั้งหมด':
     df_filtered = df_filtered[df_filtered['หน่วยงาน'] == selected_department]
